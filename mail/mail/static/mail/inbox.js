@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function compose_email() {
+  // alert("Debug : compose_email");
   // Show compose view and hide other views
   document.querySelector('#emails-view').style.display = 'none';
   document.querySelector('#compose-view').style.display = 'block';
@@ -31,7 +32,51 @@ function load_mailbox(mailbox) {
   document.querySelector('#compose-view').style.display = 'none';
 
   // Show the mailbox name
-  document.querySelector('#emails-view').innerHTML = `<h3>${mailbox.charAt(0).toUpperCase() + mailbox.slice(1)}</h3>`;
+  document.querySelector('#emails-view').innerHTML = `
+    <h3>${mailbox.charAt(0).toUpperCase() + mailbox.slice(1)}</h3>
+    <div id='inbox-container'></div>
+  `;
+
+  fetch(`/emails/${mailbox}`)
+  .then(response => response.json())
+  .then(emails => {
+      // Print emails
+      console.log(emails);
+
+      let inbox_container = document.querySelector('#inbox-container');
+
+      emails.forEach(email => {
+        let inbox_row = document.createElement('div');
+        inbox_row.id = 'inbox-row';
+
+        let sender_element = document.createElement('div');
+        let subject_element = document.createElement('div');
+        let timestamp_element = document.createElement('div');
+
+        sender_element.className = 'col sender';
+        subject_element.className = 'col subject';
+        timestamp_element.className = 'col timestamp';
+
+        sender_element.innerHTML = email.sender;
+        subject_element.innerHTML = email.subject;
+        timestamp_element.innerHTML = email.timestamp;
+
+        inbox_row.append(sender_element, subject_element, timestamp_element);
+
+        if (email.read === true ) {
+          inbox_row.style.backgroundColor = 'gray';
+        } else {
+          inbox_row.style.backgroundColor = 'white';
+        }
+
+        inbox_container.append(inbox_row);
+      }); 
+
+      // element.addEventListener('click', function() {
+      //     console.log('This element has been clicked!')
+      // });
+
+  })
 }
 
 function send_email() {
