@@ -15,25 +15,12 @@ textarea {
     color: gray;
 }
 
-.sender, .timestamp {
-    width: 25%;
-}
-
-.subject {
-    width: 50%;
-}
-
-#inbox-row {
+.inbox-row {
+    display: grid;
+    grid-template-columns: 25% 50% 25%;
     border-style: solid;
     border-width: 1px;
     height: 50px;
-    /* margin: 0.5px; */
-}
-
-#inbox-row:after {
-    content: "";
-    display: table;
-    clear: both;
 }
 
 #inbox-container {
