@@ -95,6 +95,31 @@ function load_mailbox(mailbox) {
   })
 }
 
+function reply_email(email_id) {
+  // Show reply view and hide other views
+  document.querySelector('#emails-view').style.display = 'none';
+  document.querySelector('#read-view').style.display = 'none';
+  document.querySelector('#compose-view').style.display = 'block';
+
+  fetch(`emails/${email_id}`)
+  .then(resopnse => resopnse.json())
+  .then(email => {
+    console.log(email);
+    
+    // Fill composition fields by an original email
+    document.querySelector('#compose-recipients').value = `${email.sender}`;
+
+    let email_subject = email.subject;
+
+    if ("RE:" !== email_subject.substring(0, 3)) {
+      email_subject = "RE: " + email_subject
+    }
+
+    document.querySelector('#compose-subject').value = email_subject;
+    document.querySelector('#compose-body').value = `On ${email.timestamp} ${email.sender} wrote: ${email.body}\n`;
+  })
+}
+
 function send_email() {
   const recipients = document.querySelector('#compose-recipients').value;
   const subject = document.querySelector('#compose-subject').value;
@@ -165,6 +190,7 @@ function view_email(email_id, mailbox) {
     reply_button.innerHTML = 'Reply';
     reply_button.type = 'button';
     reply_button.classList.add('btn', 'btn-outline-primary');
+    reply_button.id = email_id;
     archive_button.type = 'button'
     archive_button.classList.add('btn', 'btn-outline-primary')
     archive_button.id = email_id;
@@ -191,6 +217,10 @@ function view_email(email_id, mailbox) {
       }
 
       archive_email(this.id, status);
+    })
+
+    reply_button.addEventListener('click', function (){
+      reply_email(this.id);
     })
 
     email_info.append(email_sender, email_recipients, email_subject, email_timestamp);
