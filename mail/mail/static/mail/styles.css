@@ -2,6 +2,14 @@ textarea {
     min-height: 400px;
 }
 
+#email-button-group {
+    display: flex;
+}
+
+.btn {
+    margin: 2px;
+}
+
 .col {
     float: left;
     padding: 10px;
