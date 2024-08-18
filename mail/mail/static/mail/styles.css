@@ -1,36 +1,42 @@
 textarea {
-    min-height: 400px;
+  min-height: 400px;
 }
 
-#email-button-group {
-    display: flex;
+.inbox-row, .column-title {
+  display: grid;
+  grid-template-columns: 25% 50% 25%;
+  border-style: solid;
+  border-width: 1px;
+  height: 50px;
+}
+
+#title, .col {
+  float: left;
+  padding: 10px;
 }
 
 .btn {
-    margin: 2px;
-}
-
-.col {
-    float: left;
-    padding: 10px;
+  margin: 2px;
 }
 
 .sender {
-    font-weight: bold;
+  font-weight: bold;
 }
 
 .timestamp {
-    color: gray;
+  color: gray;
 }
 
-.inbox-row {
-    display: grid;
-    grid-template-columns: 25% 50% 25%;
-    border-style: solid;
-    border-width: 1px;
-    height: 50px;
+#email-button-group {
+  display: flex;
 }
 
 #inbox-container {
-    display: grid;
+  display: grid;
 }
+
+#title {
+  font-weight: bold;
+}
+
+/*# sourceMappingURL=styles.css.map */

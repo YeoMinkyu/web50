@@ -3,8 +3,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Use buttons to toggle between views
   document.querySelector('#inbox').addEventListener('click', () => load_mailbox('inbox'));
   document.querySelector('#sent').addEventListener('click', () => load_mailbox('sent'));
-  document.querySelector('#archived').addEventListener('click', () => load_mailbox('archive'));
+  document.querySelector('#archive').addEventListener('click', () => load_mailbox('archive'));
   document.querySelector('#compose').addEventListener('click', compose_email);
+  document.querySelector('#inbox').style.backgroundColor = 'black';
 
   // Use submit button to send an email
   document.querySelector('#compose-form').onsubmit = send_email;
@@ -28,6 +29,12 @@ function archive_email(email_id, status) {
 }
 
 function compose_email() {
+  // Change the color of button that is currently clicked
+  document.querySelectorAll('.btn-sm').forEach(button => {
+    button.style.backgroundColor = 'white';  
+  })
+  document.querySelector('#compose').style.backgroundColor = 'black';
+
   // Show compose view and hide other views
   document.querySelector('#emails-view').style.display = 'none';
   document.querySelector('#read-view').style.display = 'none';
@@ -40,6 +47,11 @@ function compose_email() {
 }
 
 function load_mailbox(mailbox) {
+  // Change the color of button that is currently clicked
+  document.querySelectorAll('.btn-sm').forEach(button => {
+    button.style.backgroundColor = 'white';  
+  })
+  document.querySelector(`#${mailbox}`).style.backgroundColor = 'black';
   
   // Show the mailbox and hide other views
   document.querySelector('#emails-view').style.display = 'block';
@@ -49,7 +61,13 @@ function load_mailbox(mailbox) {
   // Show the mailbox name
   document.querySelector('#emails-view').innerHTML = `
     <h3>${mailbox.charAt(0).toUpperCase() + mailbox.slice(1)}</h3>
-    <div id='inbox-container'></div>
+    <div id='inbox-container'>
+      <div class='column-title'>
+        <div id='title'>Sender</div>
+        <div id='title'>Subject</div>
+        <div id='title'>Date and time</div>
+      </div>
+    </div>
   `;
 
   fetch(`/emails/${mailbox}`)
@@ -116,7 +134,7 @@ function reply_email(email_id) {
     }
 
     document.querySelector('#compose-subject').value = email_subject;
-    document.querySelector('#compose-body').value = `On ${email.timestamp} ${email.sender} wrote: ${email.body}\n`;
+    document.querySelector('#compose-body').value = `\n\n\n----------On ${email.timestamp} ${email.sender} wrote: \n\n${email.body}\n`;
   })
 }
 
@@ -170,6 +188,7 @@ function view_email(email_id, mailbox) {
     <div id='email-button-group'></div>
     <hr>
     <div id='email-body'></div>
+    <div id='email-nav'></div>
     `;
     let email_info = document.querySelector('#email-info');
     let email_button_group = document.querySelector('#email-button-group');
@@ -182,6 +201,7 @@ function view_email(email_id, mailbox) {
     let email_contents = document.createElement('p');
     let reply_button = document.createElement('button');
     let archive_button = document.createElement('button');
+    let back_button = document.createElement('button');
 
     email_sender.innerHTML = `<b>From: </b>${email.sender}`;
     email_recipients.innerHTML = `<b>To: </b>${email.recipients}`;
@@ -192,8 +212,10 @@ function view_email(email_id, mailbox) {
     reply_button.classList.add('btn', 'btn-outline-primary');
     reply_button.id = email_id;
     archive_button.type = 'button'
-    archive_button.classList.add('btn', 'btn-outline-primary')
+    archive_button.classList.add('btn', 'btn-outline-primary');
     archive_button.id = email_id;
+    back_button.innerHTML = `Back to ${mailbox}`;
+    back_button.classList.add('btn', 'btn-outline-primary');
 
     email_contents.innerHTML = email.body;
 
@@ -223,9 +245,14 @@ function view_email(email_id, mailbox) {
       reply_email(this.id);
     })
 
+    back_button.addEventListener('click', ()=>{
+      load_mailbox(mailbox);
+    })
+
     email_info.append(email_sender, email_recipients, email_subject, email_timestamp);
     email_button_group.append(reply_button, archive_button);
     email_body.append(email_contents);
+    document.querySelector('#email-nav').append(back_button);
   });
 
   fetch(`/emails/${email_id}`, {
