@@ -1,0 +1,19 @@
+.incorrect {
+  color: red;
+}
+
+#app {
+  text-align: center;
+  font-family: sans-serif;
+}
+
+#problem {
+  font-size: 72px;
+}
+
+#winner {
+  font-size: 72px;
+  color: greenyellow;
+}
+
+/*# sourceMappingURL=style.css.map */

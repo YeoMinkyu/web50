@@ -1,0 +1,19 @@
+$central-font-size: 72px;
+
+.incorrect {
+    color: red;
+}
+
+#app {
+    text-align: center;
+    font-family: sans-serif;
+}
+
+#problem {
+    font-size: $central-font-size;
+}
+
+#winner {
+    font-size: $central-font-size;
+    color: greenyellow;
+}
