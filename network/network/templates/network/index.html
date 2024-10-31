@@ -1,5 +1,13 @@
 {% extends "network/layout.html" %}
+{% load static %}
 
 {% block body %}
-    TODO
+    <script>
+        const csrftoken = '{{ csrf_token }}';
+        document.cookie = `csrftoken=${csrftoken}; path=/`;
+    </script>
+
+    <div id="app"></div>
+    <!-- Load the external React component -->
+    <script type="text/babel" src="{% static 'network/index.jsx' %}"></script>
 {% endblock %}

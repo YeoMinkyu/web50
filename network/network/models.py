@@ -3,4 +3,28 @@ from django.db import models
 
 
 class User(AbstractUser):
-    pass
+    def __str__(self) -> str:
+        return self.username
+
+
+class Post(models.Model):
+    poster = models.ForeignKey(User, on_delete=models.CASCADE, related_name="post")
+    contents = models.TextField(max_length=280)
+    date_created = models.DateTimeField(auto_now_add=True)
+
+
+class Likes(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="like")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="like")
+
+
+class Comments(models.Model):
+    writer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comment")
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comment")
+    contents = models.TextField(max_length=280)
+    date_created = models.DateTimeField(auto_now_add=True)
+
+
+class Following(models.Model):
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name="follower")
+    following_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
