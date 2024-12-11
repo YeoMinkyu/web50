@@ -7,13 +7,14 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import User, Post
+from .models import User, Post, Following
 from .forms import PostForm
 
+
 def index(request):
-    print("Rendering index view")
     return render(request, "network/index.html")
 
+    
 @csrf_exempt
 @login_required(login_url="login")
 def generate_post(request):
@@ -24,16 +25,58 @@ def generate_post(request):
 
     content = data.get("content", "")
 
-    user_name = request.user.get_username()
-    user = User.objects.get(username=user_name)
+    username = request.user.get_username()
+    user = User.objects.get(username=username)
 
     new_post = Post(poster=user, contents=content)
     new_post.save()
 
-    print(new_post)
-
+    preproceesed_post = new_post.serialize()
 
     return JsonResponse({"message": "New post created successfully."}, status=201)
+
+
+def get_posts(request, username=""):
+    if request.method == "GET":
+        if username:
+            user = User.objects.get(username=username)
+            posts = Post.objects.filter(poster=user)
+            posts = posts.order_by("-date_created").all()
+            preprocessed_posts = [post.serialize() for post in posts]
+            # print("[Debug]: ", preprocessed_posts)
+        else:
+            posts = Post.objects.all()
+            posts = posts.order_by("-date_created").all() # Post objects
+            preprocessed_posts = [post.serialize() for post in posts]
+            # print("[Debug]: ", preprocessed_posts)
+
+        return JsonResponse(preprocessed_posts, safe=False)
+    
+    return JsonResponse({"error": "Invalid Request!"}, status=400)
+
+
+def get_profile_info(request, username):
+    if request.method == "GET":
+        current_username = request.user.get_username()
+
+        current_user = User.objects.get(username=current_username)
+        user = User.objects.get(username=username)
+        
+        follower_no = user.follower.count()
+        following_no = user.following.count()
+        is_follower = Following.objects.filter(follower=current_user).exists()
+
+        print(f"[Debug] is_follower: {is_follower}")
+
+        # print(f"[Debug] follower: {follower_no} / following: {following_no}")
+
+        return JsonResponse({"follower_no": follower_no,
+                             "following_no": following_no,
+                             "is_follwer": is_follower,
+                             })
+
+
+    return JsonResponse({"error: Invalid Request!"}, status=400)
 
 
 # @login_required(login_url="login")

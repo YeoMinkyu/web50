@@ -1,4 +1,4 @@
-.new-post{
+.new-post, .post {
     margin: 10px;
     padding: 15px;
     border: 1px solid lightgray;
@@ -6,4 +6,8 @@
 
 .btn {
     margin: 2px;
+}
+
+.p-grey {
+    color: lightslategrey;
 }
