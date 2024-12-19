@@ -3,13 +3,53 @@ const UserNameContext = React.createContext("");
 
 function SocialNetworkApp() {
     const [allPosts, setAllPosts] = React.useState([]);
-    const [currentView, setCurrentView] = React.useState("posts");
+    const [currentView, setCurrentView] = React.useState("all");
     const [loggedInUser, setLoggedInUser] = React.useState("");
     const [selectedUser, setSelectedUser] = React.useState(null);
 
     function handleUserClick(user) {
-        setSelectedUser(user);
-        setCurrentView("profile");
+        // console.log("[Debug] handleUserClick function.")
+        navigate(`profile/${user}`);
+    }
+
+    React.useEffect(() => {
+        const handlePopState = () => {
+            const path = window.location.pathname;
+
+            // console.log("[Debug] Path name", path);
+            if(path === "/following") {
+                // console.log("[Debug] setCurrentView", path);              
+                setCurrentView("following");
+            } else if(path.startsWith("/profile")) {
+                // console.log("[Debug] setCurrentView", path);
+                
+                const username = path.split("/")[2];
+                setSelectedUser(username);
+                setCurrentView("profile");
+            }
+            else {
+                // console.log("[Debug] setCurrentView", path);
+                
+                setCurrentView("all");
+            }
+        };
+
+        // Listen for back/forward browser actions
+        window.addEventListener("popstate", handlePopState);
+
+        //Initialize current view based on the URL
+        handlePopState();
+
+        return () => window.removeEventListener("popstate", handlePopState);
+    }, []);
+
+    const navigate = (path) => {
+        // Updates the browser’s URL to path, but the page doesn't reload.
+        window.history.pushState({}, "", path);
+        // Creates a popstate event manually.
+        const popStateEvent = new PopStateEvent("popstate");
+        // Triggers the popstate event 
+        dispatchEvent(popStateEvent);
     }
 
     // Fetch logged-in user on mount
@@ -20,36 +60,33 @@ function SocialNetworkApp() {
                 setLoggedInUser(data.username);
             })
             .catch(error => console.error("Error fecthing username:", error));
-
-        fetch('/get-posts')
-            .then(response => response.json())
-            .then(posts => {
-                if (Array.isArray(posts)) {
+        if (currentView === "all") {
+            fetch('/get-posts')
+                .then(response => response.json())
+                .then(posts => {
                     setAllPosts(posts);
-                    console.log("[Debug] posts: ", posts);
-                } else {
-                    console.error("Unexpected API reponse:", posts);
-                    setAllPosts([]);
-                }
-                
-            })
-            .catch(error => console.error("Error fetching posts:", error));
+                    // console.log("[Debug] All posts: ", posts);
+                })
+                .catch(error => console.error("Error fetching posts:", error));
+        }
     }, []);
 
-    // console.log("Debug: ", loggedInUser);
+    // console.log("[Debug] loggedInUser: ", loggedInUser);
 
     return (
         <div>
             <UserNameContext.Provider value={loggedInUser}>
-                {loggedInUser && currentView === "posts" && <NewPost posts={allPosts} setAllPosts={setAllPosts}/>}
-                {currentView === "posts" &&
+                {loggedInUser && currentView === "all" && <NewPost posts={allPosts} setAllPosts={setAllPosts}/>}
+                {currentView === "all" &&
                     <div className="all-post">
                         {allPosts && allPosts.map((post) => (
                             <Post key={post.id} onUserClicked={handleUserClick} post={post}/>
                         ))}
                     </div>
+}
+                {currentView === "following" && <Following onUserClicked={handleUserClick}/>
                 }
-                {currentView === "profile" && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
+                {currentView === "profile" && selectedUser && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
             </UserNameContext.Provider>
         </div>
     );
@@ -115,12 +152,39 @@ function Post({onUserClicked, post }) {
 
     return(
         <div className="post">
-            <a href="#" onClick={() => onUserClicked(post.poster)}><h5>{post.poster}</h5></a>
+            <a href={`/profile/${post.poster}`} onClick={(e) => {
+                e.preventDefault();
+                onUserClicked(post.poster)
+            }}>
+                    <h5>{post.poster}</h5></a>
             <p className="p-grey">{post.timestamp}</p>
             <p>{post.contents}</p>
             <Like />
             <a href="#">Edit</a>
             <p className="p-grey">Comment</p>
+        </div>
+    );
+}
+
+
+function Following({onUserClicked}) {
+    const [followingPosts, setFollowingPosts] = React.useState([]);
+
+    React.useEffect(() => {
+        fetch('/get-posts/following')
+            .then(response => response.json())
+            .then(posts => {
+                setFollowingPosts(posts);
+            })
+            .catch(error => console.error("Error fetching following posts", error));
+
+    }, []);
+
+    return (
+        <div className="following-posts">
+            {followingPosts && followingPosts.map((post) => (
+                <Post key={post.id} onUserClicked={onUserClicked} post={post} />
+            ))}
         </div>
     );
 }
@@ -133,16 +197,47 @@ function UserProfile({onUserClicked, user}) {
     const [userPosts, setUserPosts] = React.useState([]);
     const loggedInUser = React.useContext(UserNameContext);
 
+    function handleFollow() {
+        fetch('/follow', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json;charset=utf-8',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                followingUser: user,
+            }),
+            credentials: 'include',
+        })
+            .then(response => response.json())
+            .then(result => {
+                console.log(result.message || result.error);
+
+                fetch(`/get-profile-info/${user}`)
+                .then(response => response.json())
+                .then(info => {
+                    setFollowerNo(info.follower_no);
+                    setFollowingNo(info.following_no);
+                    setIsFollower(info.is_follower);
+                })
+            })
+
+        setIsFollower(!isFollower);
+    }
+
     React.useEffect(()=> {
-        fetch(`get-profile-info/${user}`)
+        if (!user) return;
+
+        fetch(`/get-profile-info/${user}`)
             .then(response => response.json())
             .then(info => {
                 setFollowerNo(info.follower_no);
                 setFollowingNo(info.following_no);
                 setIsFollower(info.is_follower);
+                // console.log("[Debug] isFollower: ", info.is_follower);
             })
         
-        fetch(`get-posts/${user}`)
+        fetch(`/get-posts/profile/${user}`)
             .then(response => response.json())
             .then(posts => {
                 console.log("[Debug] Fetching posts at UserProfile:", posts);
@@ -151,7 +246,7 @@ function UserProfile({onUserClicked, user}) {
             })
             .catch(error => console.error({"Error fetching posts": error}));
 
-    }, []);
+    }, [user]);
 
     return (
         <div className="profile">
@@ -161,6 +256,7 @@ function UserProfile({onUserClicked, user}) {
                 {
                     loggedInUser !== user &&
                     <button 
+                    onClick={handleFollow}
                     type="button"
                     className="btn btn-outline-dark">
                     {isFollower ? "Unfollow" : "Follow"}

@@ -14,7 +14,33 @@ from .forms import PostForm
 def index(request):
     return render(request, "network/index.html")
 
+
+@csrf_exempt
+@login_required(login_url="login")
+def follow(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST request required"}, status=400)
     
+    data = json.loads(request.body)
+
+    following_username = data.get("followingUser", "")
+    # print(f"[Debug/views.py/follow] ${following_username}")
+    following_user = User.objects.get(username=following_username)
+
+    logged_in_username = request.user.get_username()
+    logged_in_user = User.objects.get(username=logged_in_username)
+
+    is_following = Following.objects.filter(follower=logged_in_user, following_user=following_user).exists()
+
+    if is_following:
+        Following.objects.filter(follower=logged_in_user, following_user=following_user).delete()
+        return JsonResponse({"messge": f"${logged_in_username} unfollows ${following_username}."})
+    else:
+        new_following = Following(follower=logged_in_user, following_user=following_user)
+        new_following.save()
+        return JsonResponse({"messge": f"${logged_in_username} follows ${following_username}."})
+
+
 @csrf_exempt
 @login_required(login_url="login")
 def generate_post(request):
@@ -31,24 +57,41 @@ def generate_post(request):
     new_post = Post(poster=user, contents=content)
     new_post.save()
 
-    preproceesed_post = new_post.serialize()
-
     return JsonResponse({"message": "New post created successfully."}, status=201)
 
 
-def get_posts(request, username=""):
+def get_posts(request, which_posts="all", username=""):
     if request.method == "GET":
-        if username:
-            user = User.objects.get(username=username)
-            posts = Post.objects.filter(poster=user)
-            posts = posts.order_by("-date_created").all()
-            preprocessed_posts = [post.serialize() for post in posts]
-            # print("[Debug]: ", preprocessed_posts)
+        if which_posts == "profile":
+            if username:
+                user = User.objects.get(username=username)
+                posts = Post.objects.filter(poster=user).order_by("-date_created").all()
+                preprocessed_posts = [post.serialize() for post in posts]
+                # print("[Debug/views.py/get_posts]: ", preprocessed_posts)
+        elif which_posts == "following":
+            logged_in_username = request.user.get_username()
+            logged_in_user = User.objects.get(username=logged_in_username)
+
+            
+            try:
+                following_relationships = Following.objects.filter(follower=logged_in_user)
+            except TypeError:
+                return JsonResponse({"error": "Invalid Request!"}, status=400)
+            else:
+                following_users = following_relationships.values_list('following_user', flat=True)
+                # print("[Debug/views.py/get_posts] following_users: ", following_users)
+                '''
+                for following_user in following_users:
+                    print("[Debug/views.py/get_posts] following_user: ", following_user)
+                '''
+                posts = Post.objects.filter(poster__in=following_users).order_by("-date_created")
+                preprocessed_posts = [post.serialize() for post in posts]
+                # print("[Debug/views.py/get_posts] Following post: ", preprocessed_posts)
         else:
             posts = Post.objects.all()
             posts = posts.order_by("-date_created").all() # Post objects
             preprocessed_posts = [post.serialize() for post in posts]
-            # print("[Debug]: ", preprocessed_posts)
+            # print("[Debug/views.py/get_posts]: ", preprocessed_posts)
 
         return JsonResponse(preprocessed_posts, safe=False)
     
@@ -57,22 +100,22 @@ def get_posts(request, username=""):
 
 def get_profile_info(request, username):
     if request.method == "GET":
-        current_username = request.user.get_username()
+        logged_in_username = request.user.get_username()
 
-        current_user = User.objects.get(username=current_username)
-        user = User.objects.get(username=username)
+        logged_in_user = User.objects.get(username=logged_in_username)
+        profile_user = User.objects.get(username=username)
         
-        follower_no = user.follower.count()
-        following_no = user.following.count()
-        is_follower = Following.objects.filter(follower=current_user).exists()
+        follower_no = profile_user.following.count()
+        following_no = profile_user.follower.count()
+        is_follower = Following.objects.filter(follower=logged_in_user, following_user=profile_user).exists()
 
-        print(f"[Debug] is_follower: {is_follower}")
+        # print(f"[Debug/views.py/get_profile_info] is_follower: {is_follower}")
 
         # print(f"[Debug] follower: {follower_no} / following: {following_no}")
 
         return JsonResponse({"follower_no": follower_no,
                              "following_no": following_no,
-                             "is_follwer": is_follower,
+                             "is_follower": is_follower,
                              })
 
 
