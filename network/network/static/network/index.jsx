@@ -1,15 +1,54 @@
 const UserNameContext = React.createContext("");
+const CurrentViewContext = React.createContext("all");
 
 
 function SocialNetworkApp() {
-    const [allPosts, setAllPosts] = React.useState([]);
+    const [posts, setPosts] = React.useState([]);
     const [currentView, setCurrentView] = React.useState("all");
     const [loggedInUser, setLoggedInUser] = React.useState("");
     const [selectedUser, setSelectedUser] = React.useState(null);
+    const [paginationInfo, setPaginationInfo] = React.useState({
+        hasPrevious: false,
+        previousPageNumber: null,
+        pageNumber: 1,
+        wholePagesNumber: 1,
+        hasNext: false,
+        nextPageNumber: null
+    });
+
+    function handlePageChange(pageNumber, view = currentView) {
+        // console.log(`[Debug] handlePageChange called for view: ${view}, pageNumber: ${pageNumber}`);
+        let url = view === "profile"
+            ? `/get-posts/${view}/${selectedUser}/${pageNumber}`
+            : `/get-posts/${view}/${pageNumber}`;
+    
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // console.log("[Debug] API response Posts:", data.posts);
+                // console.log("[Debug] API response Pagination:", data.pagination);
+                setPosts(data.posts);
+                setPaginationInfo({
+                    hasPrevious: data.pagination.has_previous,
+                    previousPageNumber: data.pagination.previous_page_number,
+                    pageNumber: data.pagination.page_number,
+                    wholePagesNumber: data.pagination.whole_pages_number,
+                    hasNext: data.pagination.has_next,
+                    nextPageNumber: data.pagination.next_page_number
+                });
+            })
+            .catch(error => console.error("Error fetching posts:", error));
+    }
+    
 
     function handleUserClick(user) {
-        // console.log("[Debug] handleUserClick function.")
-        navigate(`profile/${user}`);
+        // console.log("[Debug] handleUserClick user:", user);
+        navigate(`/profile/${user}`);
     }
 
     React.useEffect(() => {
@@ -18,8 +57,9 @@ function SocialNetworkApp() {
 
             // console.log("[Debug] Path name", path);
             if(path === "/following") {
-                // console.log("[Debug] setCurrentView", path);              
+                // console.log("[Debug] setCurrentView", path);   
                 setCurrentView("following");
+                // console.log("[Debug] Navigated to:", currentView);           
             } else if(path.startsWith("/profile")) {
                 // console.log("[Debug] setCurrentView", path);
                 
@@ -28,8 +68,7 @@ function SocialNetworkApp() {
                 setCurrentView("profile");
             }
             else {
-                // console.log("[Debug] setCurrentView", path);
-                
+                // console.log("[Debug] setCurrentView", path);                
                 setCurrentView("all");
             }
         };
@@ -44,11 +83,15 @@ function SocialNetworkApp() {
     }, []);
 
     const navigate = (path) => {
-        // Updates the browser’s URL to path, but the page doesn't reload.
+        // console.log(`[Debug] Navigating to: ${path}`);
+        const newView = path.startsWith("/following") ? "following" : 
+                        path.startsWith("/profile") ? "profile" : "all";
+
+        setCurrentView(newView); // Update state before triggering a fetch
         window.history.pushState({}, "", path);
-        // Creates a popstate event manually.
+
+        // Trigger popstate manually
         const popStateEvent = new PopStateEvent("popstate");
-        // Triggers the popstate event 
         dispatchEvent(popStateEvent);
     }
 
@@ -59,36 +102,101 @@ function SocialNetworkApp() {
             .then(data => {
                 setLoggedInUser(data.username);
             })
-            .catch(error => console.error("Error fecthing username:", error));
-        if (currentView === "all") {
-            fetch('/get-posts')
-                .then(response => response.json())
-                .then(posts => {
-                    setAllPosts(posts);
-                    // console.log("[Debug] All posts: ", posts);
-                })
-                .catch(error => console.error("Error fetching posts:", error));
-        }
+            .catch(error => console.error("Error fetching username:", error));
     }, []);
+
+    React.useEffect(() => {
+        // console.log(`[Debug] currentView changed to: ${currentView}`);
+        if (currentView === "following" || currentView === "all" || currentView === "profile") {
+            setPaginationInfo({
+                hasPrevious: false,
+                previousPageNumber: null,
+                pageNumber: 1,
+                wholePagesNumber: 1,
+                hasNext: false,
+                nextPageNumber: null
+            });
+            handlePageChange(1, currentView);
+        }
+    }, [currentView]);
 
     // console.log("[Debug] loggedInUser: ", loggedInUser);
 
     return (
         <div>
             <UserNameContext.Provider value={loggedInUser}>
-                {loggedInUser && currentView === "all" && <NewPost posts={allPosts} setAllPosts={setAllPosts}/>}
-                {currentView === "all" &&
-                    <div className="all-post">
-                        {allPosts && allPosts.map((post) => (
-                            <Post key={post.id} onUserClicked={handleUserClick} post={post}/>
-                        ))}
-                    </div>
-}
-                {currentView === "following" && <Following onUserClicked={handleUserClick}/>
-                }
+                <CurrentViewContext.Provider value={currentView}>
+                {loggedInUser && currentView === "all" && <NewPost posts={posts} setAllPosts={setPosts}/>}
+                {currentView === "all" && 
+                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                {currentView === "following" && 
+                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
                 {currentView === "profile" && selectedUser && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
+                {currentView === "profile" && 
+                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                </CurrentViewContext.Provider>
             </UserNameContext.Provider>
         </div>
+    );
+}
+
+
+function Pagination({paginationInfo: paginationProps, onPageChange}) {
+    const currentView = React.useContext(CurrentViewContext);
+    const pageNumbers = Array.from({length: paginationProps.wholePagesNumber}, (_, i) => i + 1);
+    // console.log("[Debug] paginationProps:", paginationProps);
+    // console.log("[Debug] pageNumbers: ", pageNumbers);
+    // console.log("[Debug] currentView: ", currentView);
+    
+
+    return (
+        // Pagination
+        <nav aria-label="...">
+            <ul className="pagination">
+                <li className={paginationProps.hasPrevious ? "page-item" : "page-item disabled"}>
+                <a  className="page-link"
+                    href={`/get-posts/${currentView}/${paginationProps.previousPageNumber}`}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        // console.log("[Debug] Previous page clicked:", paginationProps.previousPageNumber);
+                        onPageChange(paginationProps.previousPageNumber, currentView);
+                    }}
+                    tabIndex={paginationProps.hasPrevious ? "0" : "-1"}
+                    aria-disabled={`${!paginationProps.hasPrevious}`}>
+                        Previous
+                </a>
+                </li>
+                {pageNumbers.map((number) => {
+                    return(
+                        <li key={number} className={paginationProps.pageNumber === number ? "page-item active" : "page-item"}>
+                            <a  className="page-link"
+                                href={`/get-posts/${currentView}/${number}`}
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    // console.log("[Debug] Page number clicked:", number);
+                                    onPageChange(number, currentView);
+                                }}>
+                                {number}
+                                {paginationProps.pageNumber === number && <span className="sr-only">(current)</span>}
+                            </a>
+                        </li>
+                    )
+                })}
+                <li className={paginationProps.hasNext ? "page-item" : "page-item disabled"}>
+                <a  className="page-link"
+                    href={`/get-posts/${currentView}/${paginationProps.nextPageNumber}`}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        // console.log("[Debug] Next page clicked:", paginationProps.nextPageNumber);
+                        onPageChange(paginationProps.nextPageNumber, currentView);
+                    }}
+                    tabIndex={paginationProps.hasNext ? "0" : "-1"}
+                    aria-disabled={`${!paginationProps.hasNext}`}>
+                    Next
+                </a>
+                </li>
+            </ul>
+        </nav>
     );
 }
 
@@ -119,10 +227,10 @@ function NewPost({posts, setAllPosts}) {
             .then(result => {
                 console.log(result.message || result.error);
 
-                fetch('/get-posts')
+                fetch('/get-posts/all')
                 .then(response => response.json())
-                .then(updatedPosts => {
-                    setAllPosts(updatedPosts);
+                .then(data => {
+                    setAllPosts(data.posts);
                 });
 
                 setContent("");
@@ -147,6 +255,18 @@ function NewPost({posts, setAllPosts}) {
 }
 
 
+function AllPosts({posts, onUserClicked, paginationInfo, onPageChange}) {
+    return (
+        <div className="all-post">
+            {posts && posts.map((post) => (
+                <Post key={post.id} onUserClicked={onUserClicked} post={post}/>
+            ))}
+            <Pagination paginationInfo={paginationInfo} onPageChange={onPageChange}/>
+        </div>
+
+    )
+}
+
 function Post({onUserClicked, post }) {
     // console.log("[Debug] Post data: ", post);
 
@@ -154,6 +274,7 @@ function Post({onUserClicked, post }) {
         <div className="post">
             <a href={`/profile/${post.poster}`} onClick={(e) => {
                 e.preventDefault();
+                // console.log("[Debug] poster clicked:", post.poster);
                 onUserClicked(post.poster)
             }}>
                     <h5>{post.poster}</h5></a>
@@ -167,34 +288,10 @@ function Post({onUserClicked, post }) {
 }
 
 
-function Following({onUserClicked}) {
-    const [followingPosts, setFollowingPosts] = React.useState([]);
-
-    React.useEffect(() => {
-        fetch('/get-posts/following')
-            .then(response => response.json())
-            .then(posts => {
-                setFollowingPosts(posts);
-            })
-            .catch(error => console.error("Error fetching following posts", error));
-
-    }, []);
-
-    return (
-        <div className="following-posts">
-            {followingPosts && followingPosts.map((post) => (
-                <Post key={post.id} onUserClicked={onUserClicked} post={post} />
-            ))}
-        </div>
-    );
-}
-
-
-function UserProfile({onUserClicked, user}) {
+function UserProfile({user}) {
     const [followerNo, setFollowerNo] = React.useState(0);
     const [followingNo, setFollowingNo] = React.useState(0);
     const [isFollower, setIsFollower] = React.useState(false);
-    const [userPosts, setUserPosts] = React.useState([]);
     const loggedInUser = React.useContext(UserNameContext);
 
     function handleFollow() {
@@ -236,16 +333,6 @@ function UserProfile({onUserClicked, user}) {
                 setIsFollower(info.is_follower);
                 // console.log("[Debug] isFollower: ", info.is_follower);
             })
-        
-        fetch(`/get-posts/profile/${user}`)
-            .then(response => response.json())
-            .then(posts => {
-                console.log("[Debug] Fetching posts at UserProfile:", posts);
-                setUserPosts(posts);
-                console.log("[Debug] After setUserPosts:", userPosts);
-            })
-            .catch(error => console.error({"Error fetching posts": error}));
-
     }, [user]);
 
     return (
@@ -262,12 +349,6 @@ function UserProfile({onUserClicked, user}) {
                     {isFollower ? "Unfollow" : "Follow"}
                     </button>
                 }
-            </div>
-            <div className="user-posts">
-                {/* {userPosts.map(post => <p key={post.id}>{post.contents}</p>)} */}
-                {userPosts.length > 0 ? (userPosts.map(post => (
-                    <Post key={post.id} onUserClicked={onUserClicked} post={post} />
-                ))) : <p>No posts to display!</p>}
             </div>
         </div>
     );

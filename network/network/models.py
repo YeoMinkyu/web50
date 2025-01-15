@@ -8,7 +8,7 @@ class User(AbstractUser):
 
 
 class Post(models.Model):
-    poster = models.ForeignKey(User, on_delete=models.CASCADE, related_name="post")
+    poster = models.ForeignKey(User, on_delete=models.CASCADE, related_name="posts")
     contents = models.TextField(max_length=280)
     date_created = models.DateTimeField(auto_now_add=True)
 
