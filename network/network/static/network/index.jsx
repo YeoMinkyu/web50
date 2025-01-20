@@ -1,5 +1,6 @@
 const UserNameContext = React.createContext("");
 const CurrentViewContext = React.createContext("all");
+const PostsContext = React.createContext();
 
 
 function SocialNetworkApp() {
@@ -126,14 +127,16 @@ function SocialNetworkApp() {
         <div>
             <UserNameContext.Provider value={loggedInUser}>
                 <CurrentViewContext.Provider value={currentView}>
-                {loggedInUser && currentView === "all" && <NewPost posts={posts} setAllPosts={setPosts}/>}
-                {currentView === "all" && 
-                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
-                {currentView === "following" && 
-                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
-                {currentView === "profile" && selectedUser && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
-                {currentView === "profile" && 
-                    <AllPosts posts={posts} onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                    <PostsContext.Provider value={{posts, setPosts}}>
+                    {loggedInUser && currentView === "all" && <NewPost/>}
+                    {currentView === "all" && 
+                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                    {currentView === "following" && 
+                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                    {currentView === "profile" && selectedUser && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
+                    {currentView === "profile" && 
+                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
+                    </PostsContext.Provider>
                 </CurrentViewContext.Provider>
             </UserNameContext.Provider>
         </div>
@@ -201,7 +204,8 @@ function Pagination({paginationInfo: paginationProps, onPageChange}) {
 }
 
 
-function NewPost({posts, setAllPosts}) {
+function NewPost() {
+    const setPosts = React.useContext(PostsContext).setPosts;
 
     const [content, setContent] = React.useState("");
     const [loading, setLoading] = React.useState(false);
@@ -230,12 +234,12 @@ function NewPost({posts, setAllPosts}) {
                 fetch('/get-posts/all')
                 .then(response => response.json())
                 .then(data => {
-                    setAllPosts(data.posts);
+                    setPosts(data.posts);
                 });
 
                 setContent("");
                 setLoading(false);
-        });
+            });
     }
 
     return (
@@ -255,11 +259,13 @@ function NewPost({posts, setAllPosts}) {
 }
 
 
-function AllPosts({posts, onUserClicked, paginationInfo, onPageChange}) {
+function AllPosts({onEditClicked, onUserClicked, paginationInfo, onPageChange}) {
+    const posts = React.useContext(PostsContext).posts;
+    
     return (
         <div className="all-post">
             {posts && posts.map((post) => (
-                <Post key={post.id} onUserClicked={onUserClicked} post={post}/>
+                <Post key={post.id} onEditClicked={onEditClicked} onUserClicked={onUserClicked} post={post}/>
             ))}
             <Pagination paginationInfo={paginationInfo} onPageChange={onPageChange}/>
         </div>
@@ -267,8 +273,44 @@ function AllPosts({posts, onUserClicked, paginationInfo, onPageChange}) {
     )
 }
 
-function Post({onUserClicked, post }) {
+function Post({onUserClicked, post}) {
+    const loggedInUser = React.useContext(UserNameContext);
+    const {posts, setPosts} = React.useContext(PostsContext);
+    const [editMode, setEditMode] = React.useState(false);
+    const [content, setContent] = React.useState(post.contents);
+
     // console.log("[Debug] Post data: ", post);
+    console.log("[Debug] Logged in user: ", loggedInUser);
+    console.log("[Debug] Post data: ", post.poster);
+
+    function handleEdit(event) {
+        // console.log("[Debug] handleEdit called");
+        event.preventDefault();
+
+        fetch(`/edit-post/${post.id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json;charset=utf-8',
+                'X-CSRFToken':  getCsrfToken(),
+            },
+            body: JSON.stringify({
+                content: content
+            }),
+            credentials: "include",
+        })
+            .then(response => response.json())
+            .then(result => {
+                console.log(result.message || result.error);
+
+                fetch('/get-posts/all')
+                .then(response => response.json())
+                .then(data => {
+                    setPosts(data.posts);
+                });
+            });
+
+        setEditMode(!editMode);
+    }
 
     return(
         <div className="post">
@@ -279,10 +321,42 @@ function Post({onUserClicked, post }) {
             }}>
                     <h5>{post.poster}</h5></a>
             <p className="p-grey">{post.timestamp}</p>
-            <p>{post.contents}</p>
+            {!editMode && <p>{content}</p>}
             <Like />
-            <a href="#">Edit</a>
-            <p className="p-grey">Comment</p>
+            {loggedInUser === post.poster && editMode ? (
+                <form onSubmit={handleEdit}>
+                    <textarea value={content} onChange={(e) => setContent(e.target.value)}/>
+                    <button
+                        className="btn btn-outline-dark save-post-btn"
+                        type="submit"
+                    > 
+                        Save
+                    </button>
+                    <button
+                        className="btn btn-outline-dark cancel-post-btn"
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            setEditMode(false);
+                            setContent(post.contents);
+                        }}
+                    >
+                        Cancel
+                    </button>
+                </form>         
+                )  
+             :
+             <button 
+                className="btn btn-outline-dark edit-post-btn"
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    setEditMode(!editMode);
+                }}
+                >
+                    Edit
+                </button>
+            }            
         </div>
     );
 }

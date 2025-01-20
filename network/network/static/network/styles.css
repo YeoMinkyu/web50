@@ -1,11 +1,24 @@
+.btn {
+    margin: 2px;
+}
+
+.edit-post-btn, .cancel-post-btn {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+}
+
+.save-post-btn {
+    position: absolute;
+    bottom: 10px;
+    right: 90px;
+}
+
 .new-post, .post {
     margin: 10px;
     padding: 15px;
     border: 1px solid lightgray;
-}
-
-.btn {
-    margin: 2px;
+    position: relative;
 }
 
 .p-grey {

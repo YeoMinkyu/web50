@@ -3,7 +3,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -14,6 +14,25 @@ from .models import User, Post, Following
 def index(request):
     return render(request, "network/index.html")
 
+
+@csrf_exempt
+@login_required(login_url="login")
+def edit_post(request, post_id):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST request required"}, status=400)
+    
+    data = json.loads(request.body)
+    content = data.get("content", "")
+
+    edit_post = Post.objects.get(id=post_id)
+    edit_post.contents = content
+    edit_post.save()
+
+    # print(f"[Debug/views.py/edit_post] edit_post: {edit_post}")
+    # print(f"[Debug/views.py/edit_post] date: {edit_post.date_created}")
+
+    return JsonResponse({"message": "New post is edited successfully."}, status=201)
+    
 
 @csrf_exempt
 @login_required(login_url="login")
