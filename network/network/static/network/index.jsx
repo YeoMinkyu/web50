@@ -322,7 +322,7 @@ function Post({onUserClicked, post}) {
                     <h5>{post.poster}</h5></a>
             <p className="p-grey">{post.timestamp}</p>
             {!editMode && <p>{content}</p>}
-            <Like />
+            <Like post={post}/>
             {loggedInUser === post.poster && editMode ? (
                 <form onSubmit={handleEdit}>
                     <textarea value={content} onChange={(e) => setContent(e.target.value)}/>
@@ -429,23 +429,71 @@ function UserProfile({user}) {
 }
 
 
-function Like() {
+function Like({post}) {
     const [liked, setLiked] = React.useState(false);
+    const [likes, setLikes] = React.useState(0);
+    const [loading, setLoading] = React.useState(false);
 
-    function handleLike() {
-        setLiked(!liked);
+
+    async function fetchLikes() {
+        try {
+            const response = await fetch(`/like/${post.id}`);
+
+            if (!response.ok) throw new Error("Failed to fetch likes.");
+            
+            const data = await response.json();
+
+            setLiked(data.liked);
+            setLikes(data.likes);
+        } catch (error) {
+            console.error("Error fetching likes: ", error);
+        }
     }
+
+    async function handleLike() {
+        if (loading) return;
+
+        setLoading(true);
+
+        try {
+            const response = await fetch(`/like/${post.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    liked: !liked
+                }),
+                credentials: 'include', 
+            })
+
+            if (!response.ok) throw new Error("Faild to post data");
+
+            await fetchLikes();
+        } catch (error) {
+            console.error("Error posting likes: ", error)
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    React.useEffect(() => {
+        fetchLikes();
+    },[post.id])
 
     return (
         <div className='like'>
             <span 
-                className={liked? "fa fa-heart" : "fa fa-heart-o"}
+                className={`fa ${liked? "fa-heart" : "fa-heart-o"} ${loading ? "disabled" : ""}`}
                 onClick={handleLike}
-                aria-hidden="true">
+                aria-hidden="true"
+                style={{cursor: loading ? "not-allowed" : "pointer"}}
+                >
             </span>
             <span 
                 className="badge">
-                0
+                {likes}
             </span>
         </div>
     );

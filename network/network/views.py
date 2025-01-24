@@ -4,11 +4,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import HttpResponseRedirect, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import User, Post, Following
+from .models import User, Post, Following, Likes
 
 
 def index(request):
@@ -144,7 +144,7 @@ def get_profile_info(request, username):
             return JsonResponse({"follower_no": follower_no,
                                 "following_no": following_no,
                                 "is_follower": is_follower,
-                                })
+                                }, status=200)
 
 
     return JsonResponse({"error": "Invalid Request!"}, status=400)
@@ -155,6 +155,50 @@ def get_username(request):
     user_name = request.user.get_username()
 
     return JsonResponse({'username': user_name}, status=200)
+
+
+@csrf_exempt
+@login_required(login_url="login")
+def like_post(request, post_id):
+    user = request.user
+
+
+    if request.method == "GET":
+        # gathering data for the whole likes of this post
+        # and whether the logged-in user like the current post
+        post = get_object_or_404(Post, id=post_id)
+
+        liked = Likes.objects.filter(post=post, user=user).exists()
+        likes_count = post.like.count()
+
+        # print(f"[Debug] likes: {likes}")
+
+        return JsonResponse({'liked': liked,
+                            'likes': likes_count,
+                            }, status=200)
+    
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            liked = data.get("liked", None)
+
+            if liked is None:
+                return JsonResponse({"error": "Missing 'liked' filed"}, status=400)
+            
+            post = get_object_or_404(Post, id=post_id)
+
+            if liked:
+                Likes.objects.get_or_create(user=user, post=post)
+                message = "Like added successfully."
+            else:
+                Likes.objects.filter(user=user, post=post).delete()
+                message = "Like removed successfully."
+            
+            return JsonResponse({"message": message}, status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data!"}, status=400)
+        
+    return JsonResponse({"error":"Invalid reqeust method!"}, status=405)
 
 
 def login_view(request):
