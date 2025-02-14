@@ -1,56 +1,54 @@
-const UserNameContext = React.createContext("");
-const CurrentViewContext = React.createContext("all");
-const PostsContext = React.createContext();
+const StatesContext = React.createContext(null);
+const DispatchContext = React.createContext(null);
+
+
+const ACTION = {
+    SETCURRENTVIEW: 'setCurrentView',
+    SETLOGGEDINUSER: 'setLoggedInUser',
+    SETPOSTS: 'setPosts',
+    SETSELECTEDUSER: 'setSelectedUser',
+    SETPAGINATIONINFO: 'setPaginationInfo',
+    RESETPAGINATIONINFO: 'resetPaginationInfo',
+}
 
 
 function SocialNetworkApp() {
-    const [posts, setPosts] = React.useState([]);
-    const [currentView, setCurrentView] = React.useState("all");
-    const [loggedInUser, setLoggedInUser] = React.useState("");
-    const [selectedUser, setSelectedUser] = React.useState(null);
-    const [paginationInfo, setPaginationInfo] = React.useState({
-        hasPrevious: false,
-        previousPageNumber: null,
-        pageNumber: 1,
-        wholePagesNumber: 1,
-        hasNext: false,
-        nextPageNumber: null
-    });
+    const [states, dispatch] = React.useReducer(statesReducer, initialStates);
 
-    function handlePageChange(pageNumber, view = currentView) {
+    const handlePageChange = async (pageNumber, view = states.currentView) => {
         // console.log(`[Debug] handlePageChange called for view: ${view}, pageNumber: ${pageNumber}`);
         let url = view === "profile"
-            ? `/get-posts/${view}/${selectedUser}/${pageNumber}`
+            ? `/get-posts/${view}/${states.selectedUser}/${pageNumber}`
             : `/get-posts/${view}/${pageNumber}`;
+
+        try {
+            const response = await fetch(url);
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     
-        fetch(url)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                // console.log("[Debug] API response Posts:", data.posts);
-                // console.log("[Debug] API response Pagination:", data.pagination);
-                setPosts(data.posts);
-                setPaginationInfo({
-                    hasPrevious: data.pagination.has_previous,
-                    previousPageNumber: data.pagination.previous_page_number,
-                    pageNumber: data.pagination.page_number,
-                    wholePagesNumber: data.pagination.whole_pages_number,
-                    hasNext: data.pagination.has_next,
-                    nextPageNumber: data.pagination.next_page_number
-                });
-            })
-            .catch(error => console.error("Error fetching posts:", error));
+            const data = await response.json();
+
+            dispatch({type: ACTION.SETPOSTS, posts: data.posts});
+            dispatch({type: ACTION.SETPAGINATIONINFO, paginationInfo: {
+                hasPrevious: data.pagination.has_previous,
+                previousPageNumber: data.pagination.previous_page_number,
+                pageNumber: data.pagination.page_number,
+                wholePagesNumber: data.pagination.whole_pages_number,
+                hasNext: data.pagination.has_next,
+                nextPageNumber: data.pagination.next_page_number
+            }});
+        } catch (error) {
+            console.error('Error fetching pagination', error);
+        }
     }
     
 
-    function handleUserClick(user) {
+    const handleUserClick = (user) => {
         // console.log("[Debug] handleUserClick user:", user);
-        navigate(`/profile/${user}`);
+       navigate(`/profile/${user}`);
     }
+
+    const navigate = useNavigation(dispatch);
 
     React.useEffect(() => {
         const handlePopState = () => {
@@ -59,18 +57,18 @@ function SocialNetworkApp() {
             // console.log("[Debug] Path name", path);
             if(path === "/following") {
                 // console.log("[Debug] setCurrentView", path);   
-                setCurrentView("following");
+                dispatch({type: ACTION.SETCURRENTVIEW, currentView: "following"});
                 // console.log("[Debug] Navigated to:", currentView);           
             } else if(path.startsWith("/profile")) {
                 // console.log("[Debug] setCurrentView", path);
                 
                 const username = path.split("/")[2];
-                setSelectedUser(username);
-                setCurrentView("profile");
+                dispatch({type: ACTION.SETSELECTEDUSER, selectedUser: username});
+                dispatch({type: ACTION.SETCURRENTVIEW, currentView: "profile"});
             }
             else {
                 // console.log("[Debug] setCurrentView", path);                
-                setCurrentView("all");
+                dispatch({type: ACTION.SETCURRENTVIEW, currentView: "all"});
             }
         };
 
@@ -80,73 +78,51 @@ function SocialNetworkApp() {
         //Initialize current view based on the URL
         handlePopState();
 
-        return () => window.removeEventListener("popstate", handlePopState);
+        // Removes the event listener when the component unmounts to prevent memory leaks.
+        return () => {
+            window.removeEventListener("popstate", handlePopState);
+        };
     }, []);
 
-    const navigate = (path) => {
-        // console.log(`[Debug] Navigating to: ${path}`);
-        const newView = path.startsWith("/following") ? "following" : 
-                        path.startsWith("/profile") ? "profile" : "all";
-
-        setCurrentView(newView); // Update state before triggering a fetch
-        window.history.pushState({}, "", path);
-
-        // Trigger popstate manually
-        const popStateEvent = new PopStateEvent("popstate");
-        dispatchEvent(popStateEvent);
-    }
 
     // Fetch logged-in user on mount
     React.useEffect(() => {
-        fetch('/get-username')
-            .then(response => response.json())
-            .then(data => {
-                setLoggedInUser(data.username);
-            })
-            .catch(error => console.error("Error fetching username:", error));
+        fetchUsernameEffect(dispatch);
     }, []);
 
     React.useEffect(() => {
         // console.log(`[Debug] currentView changed to: ${currentView}`);
-        if (currentView === "following" || currentView === "all" || currentView === "profile") {
-            setPaginationInfo({
-                hasPrevious: false,
-                previousPageNumber: null,
-                pageNumber: 1,
-                wholePagesNumber: 1,
-                hasNext: false,
-                nextPageNumber: null
-            });
-            handlePageChange(1, currentView);
+        if (states.currentView === "following" || states.currentView === "all" || states.currentView === "profile") {
+            dispatch({type: ACTION.RESETPAGINATIONINFO});
+            handlePageChange(1, states.currentView);
         }
-    }, [currentView]);
+    }, [states.currentView]);
 
     // console.log("[Debug] loggedInUser: ", loggedInUser);
 
     return (
         <div>
-            <UserNameContext.Provider value={loggedInUser}>
-                <CurrentViewContext.Provider value={currentView}>
-                    <PostsContext.Provider value={{posts, setPosts}}>
-                    {loggedInUser && currentView === "all" && <NewPost/>}
-                    {currentView === "all" && 
-                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
-                    {currentView === "following" && 
-                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
-                    {currentView === "profile" && selectedUser && <UserProfile onUserClicked={handleUserClick} user={selectedUser}/>}
-                    {currentView === "profile" && 
-                        <AllPosts onUserClicked={handleUserClick} paginationInfo={paginationInfo} onPageChange={handlePageChange}/>}
-                    </PostsContext.Provider>
-                </CurrentViewContext.Provider>
-            </UserNameContext.Provider>
+            <StatesContext.Provider value={states}>
+                <DispatchContext.Provider value={dispatch}>
+                {states.loggedInUser && states.currentView === "all" && <NewPost/>}
+                {states.currentView === "all" && 
+                    <AllPosts onUserClicked={handleUserClick} onPageChange={handlePageChange}/>}
+                {states.currentView === "following" && 
+                    <AllPosts onUserClicked={handleUserClick} onPageChange={handlePageChange}/>}
+                {states.currentView === "profile" && states.selectedUser && <UserProfile onUserClicked={handleUserClick} user={states.selectedUser}/>}
+                {states.currentView === "profile" && 
+                    <AllPosts onUserClicked={handleUserClick} onPageChange={handlePageChange}/>}
+                </DispatchContext.Provider>
+            </StatesContext.Provider>
         </div>
     );
 }
 
 
-function Pagination({paginationInfo: paginationProps, onPageChange}) {
-    const currentView = React.useContext(CurrentViewContext);
-    const pageNumbers = Array.from({length: paginationProps.wholePagesNumber}, (_, i) => i + 1);
+function Pagination({onPageChange}) {
+    const states = useStates();
+    // const currentView = React.useContext(CurrentViewContext);
+    const pageNumbers = Array.from({length: states.paginationInfo.wholePagesNumber}, (_, i) => i + 1);
     // console.log("[Debug] paginationProps:", paginationProps);
     // console.log("[Debug] pageNumbers: ", pageNumbers);
     // console.log("[Debug] currentView: ", currentView);
@@ -156,45 +132,45 @@ function Pagination({paginationInfo: paginationProps, onPageChange}) {
         // Pagination
         <nav aria-label="...">
             <ul className="pagination">
-                <li className={paginationProps.hasPrevious ? "page-item" : "page-item disabled"}>
+                <li className={states.paginationInfo.hasPrevious ? "page-item" : "page-item disabled"}>
                 <a  className="page-link"
-                    href={`/get-posts/${currentView}/${paginationProps.previousPageNumber}`}
+                    href={`/get-posts/${states.currentView}/${states.paginationInfo.previousPageNumber}`}
                     onClick={(e) => {
                         e.preventDefault();
                         // console.log("[Debug] Previous page clicked:", paginationProps.previousPageNumber);
-                        onPageChange(paginationProps.previousPageNumber, currentView);
+                        onPageChange(states.paginationInfo.previousPageNumber, states.currentView);
                     }}
-                    tabIndex={paginationProps.hasPrevious ? "0" : "-1"}
-                    aria-disabled={`${!paginationProps.hasPrevious}`}>
+                    tabIndex={states.paginationInfo.hasPrevious ? "0" : "-1"}
+                    aria-disabled={`${!states.paginationInfo.hasPrevious}`}>
                         Previous
                 </a>
                 </li>
                 {pageNumbers.map((number) => {
                     return(
-                        <li key={number} className={paginationProps.pageNumber === number ? "page-item active" : "page-item"}>
+                        <li key={number} className={states.paginationInfo.pageNumber === number ? "page-item active" : "page-item"}>
                             <a  className="page-link"
-                                href={`/get-posts/${currentView}/${number}`}
+                                href={`/get-posts/${states.currentView}/${number}`}
                                 onClick={(e) => {
                                     e.preventDefault();
                                     // console.log("[Debug] Page number clicked:", number);
-                                    onPageChange(number, currentView);
+                                    onPageChange(number, states.currentView);
                                 }}>
                                 {number}
-                                {paginationProps.pageNumber === number && <span className="sr-only">(current)</span>}
+                                {states.paginationInfo.pageNumber === number && <span className="sr-only">(current)</span>}
                             </a>
                         </li>
                     )
                 })}
-                <li className={paginationProps.hasNext ? "page-item" : "page-item disabled"}>
+                <li className={states.paginationInfo.hasNext ? "page-item" : "page-item disabled"}>
                 <a  className="page-link"
-                    href={`/get-posts/${currentView}/${paginationProps.nextPageNumber}`}
+                    href={`/get-posts/${states.currentView}/${states.paginationInfo.nextPageNumber}`}
                     onClick={(e) => {
                         e.preventDefault();
                         // console.log("[Debug] Next page clicked:", paginationProps.nextPageNumber);
-                        onPageChange(paginationProps.nextPageNumber, currentView);
+                        onPageChange(states.paginationInfo.nextPageNumber, states.currentView);
                     }}
-                    tabIndex={paginationProps.hasNext ? "0" : "-1"}
-                    aria-disabled={`${!paginationProps.hasNext}`}>
+                    tabIndex={states.paginationInfo.hasNext ? "0" : "-1"}
+                    aria-disabled={`${!states.paginationInfo.hasNext}`}>
                     Next
                 </a>
                 </li>
@@ -205,11 +181,10 @@ function Pagination({paginationInfo: paginationProps, onPageChange}) {
 
 
 function NewPost() {
-    const setPosts = React.useContext(PostsContext).setPosts;
-
+    const states = useStates();
+    const dispatch = useStatesDispatch();
     const [content, setContent] = React.useState("");
     const [loading, setLoading] = React.useState(false);
-    const loggedInUser = React.useContext(UserNameContext);
 
     function handleSubmitPost(event) {
         event.preventDefault();
@@ -222,7 +197,7 @@ function NewPost() {
                 'X-CSRFToken':  getCsrfToken(),
             },
             body: JSON.stringify({
-                poster: loggedInUser,
+                poster: states.loggedInUser,
                 content: content
             }),
             credentials: 'include',        
@@ -234,7 +209,7 @@ function NewPost() {
                 fetch('/get-posts/all')
                 .then(response => response.json())
                 .then(data => {
-                    setPosts(data.posts);
+                    dispatch({type: ACTION.SETPOSTS, posts: data.posts});
                 });
 
                 setContent("");
@@ -259,28 +234,29 @@ function NewPost() {
 }
 
 
-function AllPosts({onEditClicked, onUserClicked, paginationInfo, onPageChange}) {
-    const posts = React.useContext(PostsContext).posts;
+function AllPosts({onEditClicked, onUserClicked, onPageChange}) {
+    const states = useStates();
     
+    // console.log("[Debug] All Posts");
     return (
         <div className="all-post">
-            {posts && posts.map((post) => (
+            {states.posts && states.posts.map((post) => (
                 <Post key={post.id} onEditClicked={onEditClicked} onUserClicked={onUserClicked} post={post}/>
             ))}
-            <Pagination paginationInfo={paginationInfo} onPageChange={onPageChange}/>
+            <Pagination onPageChange={onPageChange}/>
         </div>
 
     )
 }
 
 function Post({onUserClicked, post}) {
-    const loggedInUser = React.useContext(UserNameContext);
-    const {posts, setPosts} = React.useContext(PostsContext);
+    const states = useStates();
+    const dispatch = useStatesDispatch();
     const [editMode, setEditMode] = React.useState(false);
     const [content, setContent] = React.useState(post.contents);
 
-    // console.log("[Debug] Post data: ", post);
-    console.log("[Debug] Logged in user: ", loggedInUser);
+    console.log("[Debug] Post data: ", post);
+    console.log("[Debug] Logged in user: ", states.loggedInUser);
     console.log("[Debug] Post data: ", post.poster);
 
     function handleEdit(event) {
@@ -305,7 +281,7 @@ function Post({onUserClicked, post}) {
                 fetch('/get-posts/all')
                 .then(response => response.json())
                 .then(data => {
-                    setPosts(data.posts);
+                    dispatch({type: ACTION.SETPOSTS, posts: data.posts});
                 });
             });
 
@@ -323,7 +299,7 @@ function Post({onUserClicked, post}) {
             <p className="p-grey">{post.timestamp}</p>
             {!editMode && <p>{content}</p>}
             <Like post={post}/>
-            {loggedInUser === post.poster && editMode ? (
+            {states.loggedInUser === post.poster && editMode ? (
                 <form onSubmit={handleEdit}>
                     <textarea value={content} onChange={(e) => setContent(e.target.value)}/>
                     <button
@@ -363,10 +339,10 @@ function Post({onUserClicked, post}) {
 
 
 function UserProfile({user}) {
+    const states = useStates();
     const [followerNo, setFollowerNo] = React.useState(0);
     const [followingNo, setFollowingNo] = React.useState(0);
     const [isFollower, setIsFollower] = React.useState(false);
-    const loggedInUser = React.useContext(UserNameContext);
 
     function handleFollow() {
         fetch('/follow', {
@@ -415,7 +391,7 @@ function UserProfile({user}) {
                 <h2>{user}</h2>
                 <p>{followerNo} follower | {followingNo} following</p>
                 {
-                    loggedInUser !== user &&
+                    states.loggedInUser !== user &&
                     <button 
                     onClick={handleFollow}
                     type="button"
@@ -529,3 +505,97 @@ function getCookie(name) {
 }
 
 const getCsrfToken = () => getCookie('csrftoken');
+
+function statesReducer(states, action) {
+    switch(action.type) {
+        case ACTION.SETCURRENTVIEW : {
+            return {
+                ...states,
+                currentView: action.currentView,
+            };
+        }
+        case ACTION.SETLOGGEDINUSER: {
+            return {
+                ...states,
+                loggedInUser: action.loggedInUser,
+            };
+        }
+        case ACTION.SETPOSTS : {
+            return {
+                ...states,
+                posts: action.posts,
+            };
+        }
+        case ACTION.SETSELECTEDUSER: {
+            return {
+                ...states,
+                selectedUser: action.selectedUser,
+            };
+        }
+        case ACTION.SETPAGINATIONINFO: {
+            return {
+                ...states,
+                paginationInfo: action.paginationInfo,
+            };
+        }
+        case ACTION.RESETPAGINATIONINFO: {
+            return {
+                ...states,
+                paginationInfo: initialStates.paginationInfo,
+            }
+        }
+        default:{
+            console.log("[Debug] action: ", action.type);
+            throw Error('Unknown action: ', action.type);
+        }
+    }
+}
+
+function useNavigation(dispatch) {
+    // console.log(`[Debug] Navigating to: ${path}`);
+    return React.useCallback((path) => {
+        const newView = path.startsWith("/following") ? "following" : path.startsWith("/profile") ? "profile" : "all";
+
+        dispatch({type: ACTION.SETCURRENTVIEW, currentView: newView}); // Update state before triggering a fetch
+        window.history.pushState({}, "", path);
+        dispatchPopState();
+    }, []);   
+}
+
+function dispatchPopState() {
+    // Trigger popstate manually
+    const popStateEvent = new PopStateEvent("popstate");
+    dispatchEvent(popStateEvent);
+}
+
+function fetchUsernameEffect(dispatch) {
+    fetch('/get-username')
+            .then(response => response.json())
+            .then(data => {
+                dispatch({type: ACTION.SETLOGGEDINUSER, loggedInUser: data.username});
+            })
+            .catch(error => console.error("Error fetching username:", error));
+}
+
+function useStates() {
+    return React.useContext(StatesContext);
+}
+
+function useStatesDispatch() {
+    return React.useContext(DispatchContext);
+}
+
+const initialStates = {
+    currentView: "all",
+    loggedInUser: "",
+    posts: [],
+    selectedUser: null,
+    paginationInfo: {
+        hasPrevious: false,
+        previousPageNumber: null,
+        pageNumber: 1,
+        wholePagesNumber: 1,
+        hasNext: false,
+        nextPageNumber: null
+    }
+};

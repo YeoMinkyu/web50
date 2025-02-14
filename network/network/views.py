@@ -162,16 +162,11 @@ def get_username(request):
 def like_post(request, post_id):
     user = request.user
 
-
     if request.method == "GET":
-        # gathering data for the whole likes of this post
-        # and whether the logged-in user like the current post
         post = get_object_or_404(Post, id=post_id)
 
         liked = Likes.objects.filter(post=post, user=user).exists()
         likes_count = post.like.count()
-
-        # print(f"[Debug] likes: {likes}")
 
         return JsonResponse({'liked': liked,
                             'likes': likes_count,

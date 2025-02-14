@@ -26,13 +26,6 @@ class Likes(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="like")
 
 
-# class Comments(models.Model):
-#     writer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="comment")
-#     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comment")
-#     contents = models.TextField(max_length=280)
-#     date_created = models.DateTimeField(auto_now_add=True)
-
-
 class Following(models.Model):
     follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name="follower")
     following_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="following")
