@@ -121,56 +121,48 @@ function SocialNetworkApp() {
 
 function Pagination({onPageChange}) {
     const states = useStates();
-    // const currentView = React.useContext(CurrentViewContext);
     const pageNumbers = Array.from({length: states.paginationInfo.wholePagesNumber}, (_, i) => i + 1);
     // console.log("[Debug] paginationProps:", paginationProps);
     // console.log("[Debug] pageNumbers: ", pageNumbers);
     // console.log("[Debug] currentView: ", currentView);
+
+    const handlePageNave = (e, pageNumber) => {
+        e.preventDefault();
+        onPageChange(pageNumber, states.currentView);
+    }
     
 
     return (
         // Pagination
         <nav aria-label="...">
             <ul className="pagination">
-                <li className={states.paginationInfo.hasPrevious ? "page-item" : "page-item disabled"}>
+                <li className={`page-item ${!states.paginationInfo.hasPrevious && "disabled"}`}>
                 <a  className="page-link"
-                    href={`/get-posts/${states.currentView}/${states.paginationInfo.previousPageNumber}`}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        // console.log("[Debug] Previous page clicked:", paginationProps.previousPageNumber);
-                        onPageChange(states.paginationInfo.previousPageNumber, states.currentView);
-                    }}
+                    href='#'
+                    onClick={(e) => {handlePageNave(e, states.paginationInfo.previousPageNumber)}}
                     tabIndex={states.paginationInfo.hasPrevious ? "0" : "-1"}
-                    aria-disabled={`${!states.paginationInfo.hasPrevious}`}>
+                    aria-disabled={!states.paginationInfo.hasPrevious}>
                         Previous
                 </a>
                 </li>
                 {pageNumbers.map((number) => {
                     return(
-                        <li key={number} className={states.paginationInfo.pageNumber === number ? "page-item active" : "page-item"}>
+                        <li key={number} className={`page-item ${states.paginationInfo.pageNumber === number && "active"}`}>
                             <a  className="page-link"
-                                href={`/get-posts/${states.currentView}/${number}`}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    // console.log("[Debug] Page number clicked:", number);
-                                    onPageChange(number, states.currentView);
-                                }}>
+                                href='#'
+                                onClick={(e) => {handlePageNave(e, number)}}>
                                 {number}
                                 {states.paginationInfo.pageNumber === number && <span className="sr-only">(current)</span>}
                             </a>
                         </li>
                     )
                 })}
-                <li className={states.paginationInfo.hasNext ? "page-item" : "page-item disabled"}>
+                <li className={`page-item ${!states.paginationInfo.hasNext && "disabled"}`}>
                 <a  className="page-link"
-                    href={`/get-posts/${states.currentView}/${states.paginationInfo.nextPageNumber}`}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        // console.log("[Debug] Next page clicked:", paginationProps.nextPageNumber);
-                        onPageChange(states.paginationInfo.nextPageNumber, states.currentView);
-                    }}
+                    href='#'
+                    onClick={(e) => {handlePageNave(e, states.paginationInfo.nextPageNumber)}}
                     tabIndex={states.paginationInfo.hasNext ? "0" : "-1"}
-                    aria-disabled={`${!states.paginationInfo.hasNext}`}>
+                    aria-disabled={!states.paginationInfo.hasNext}>
                     Next
                 </a>
                 </li>
@@ -185,41 +177,50 @@ function NewPost() {
     const dispatch = useStatesDispatch();
     const [content, setContent] = React.useState("");
     const [loading, setLoading] = React.useState(false);
+    const [errorMessage, setErrorMessage] = React.useState("");
+
+    const postContent = async () => {
+        try {
+            const response = await fetch('/post', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8',
+                    'X-CSRFToken':  getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    poster: states.loggedInUser,
+                    content: content
+                }),
+                credentials: 'include',
+            })
+
+            if (!response.ok) throw new Error("Failed post to new content");
+
+            const result = await response.json();
+            
+            if (result.error) throw new Error(result.error);
+            
+            console.log(result.message);
+            await refreshPosts(dispatch);
+        } catch (error) {
+            setErrorMessage(error.message);
+        } finally {
+            setLoading(false);
+            setContent("");
+        }
+    }
 
     function handleSubmitPost(event) {
         event.preventDefault();
         setLoading(true);
-
-        fetch('/post', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json;charset=utf-8',
-                'X-CSRFToken':  getCsrfToken(),
-            },
-            body: JSON.stringify({
-                poster: states.loggedInUser,
-                content: content
-            }),
-            credentials: 'include',        
-        })
-            .then(response => response.json())
-            .then(result => {
-                console.log(result.message || result.error);
-
-                fetch('/get-posts/all')
-                .then(response => response.json())
-                .then(data => {
-                    dispatch({type: ACTION.SETPOSTS, posts: data.posts});
-                });
-
-                setContent("");
-                setLoading(false);
-            });
+        setErrorMessage("");
+        postContent();
     }
 
     return (
         <div className="new-post">
             <h4>New Post</h4>
+            {errorMessage && <p className="text-danger">{errorMessage}</p>}
             <form onSubmit={handleSubmitPost}>
                 <textarea
                     className="form-control"
@@ -254,38 +255,47 @@ function Post({onUserClicked, post}) {
     const dispatch = useStatesDispatch();
     const [editMode, setEditMode] = React.useState(false);
     const [content, setContent] = React.useState(post.contents);
+    const [errorMessage, setErrorMessage] = React.useState("");
 
-    console.log("[Debug] Post data: ", post);
-    console.log("[Debug] Logged in user: ", states.loggedInUser);
-    console.log("[Debug] Post data: ", post.poster);
+    // console.log("[Debug] Post data: ", post);
+    // console.log("[Debug] Logged in user: ", states.loggedInUser);
+    // console.log("[Debug] Post data: ", post.poster);
+
+    const postEditedPost = async () => { 
+        try {
+            const response = await fetch(`/edit-post/${post.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8',
+                    'X-CSRFToken':  getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    content: content
+                }),
+                credentials: "include",
+            })
+
+            if (!response.ok) throw new Error("Failed post edited post!");
+
+            const result = await response.json();
+
+            if (result.error) throw new Error(result.error);
+
+            await refreshPosts(dispatch);
+        } catch (error) {
+            setErrorMessage(error.message);
+        } finally {
+            setEditMode(!editMode);
+        }
+
+
+    }
 
     function handleEdit(event) {
         // console.log("[Debug] handleEdit called");
         event.preventDefault();
-
-        fetch(`/edit-post/${post.id}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json;charset=utf-8',
-                'X-CSRFToken':  getCsrfToken(),
-            },
-            body: JSON.stringify({
-                content: content
-            }),
-            credentials: "include",
-        })
-            .then(response => response.json())
-            .then(result => {
-                console.log(result.message || result.error);
-
-                fetch('/get-posts/all')
-                .then(response => response.json())
-                .then(data => {
-                    dispatch({type: ACTION.SETPOSTS, posts: data.posts});
-                });
-            });
-
-        setEditMode(!editMode);
+        setErrorMessage("");
+        postEditedPost();
     }
 
     return(
@@ -299,6 +309,7 @@ function Post({onUserClicked, post}) {
             <p className="p-grey">{post.timestamp}</p>
             {!editMode && <p>{content}</p>}
             <Like post={post}/>
+            {errorMessage && <p className="text-danger">{errorMessage}</p>}
             {states.loggedInUser === post.poster && editMode ? (
                 <form onSubmit={handleEdit}>
                     <textarea value={content} onChange={(e) => setContent(e.target.value)}/>
@@ -568,13 +579,11 @@ function dispatchPopState() {
     dispatchEvent(popStateEvent);
 }
 
-function fetchUsernameEffect(dispatch) {
-    fetch('/get-username')
-            .then(response => response.json())
-            .then(data => {
-                dispatch({type: ACTION.SETLOGGEDINUSER, loggedInUser: data.username});
-            })
-            .catch(error => console.error("Error fetching username:", error));
+async function fetchUsernameEffect(dispatch) {
+    const response = await fetch('/get-username');
+    const data = await response.json();
+
+    dispatch({type: ACTION.SETLOGGEDINUSER, loggedInUser: data.username});
 }
 
 function useStates() {
@@ -583,6 +592,13 @@ function useStates() {
 
 function useStatesDispatch() {
     return React.useContext(DispatchContext);
+}
+
+async function refreshPosts(dispatch) {
+    const response = await fetch('/get-posts/all');
+    const data = await response.json()
+
+    dispatch({type: ACTION.SETPOSTS, posts: data.posts});
 }
 
 const initialStates = {
