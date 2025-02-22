@@ -201,10 +201,13 @@ function NewPost() {
             if (result.error) throw new Error(result.error);
             
             console.log(result.message);
+
             await refreshPosts(dispatch);
-        } catch (error) {
+        }
+        catch (error) {
             setErrorMessage(error.message);
-        } finally {
+        }
+        finally {
             setLoading(false);
             setContent("");
         }
@@ -354,46 +357,62 @@ function UserProfile({user}) {
     const [followerNo, setFollowerNo] = React.useState(0);
     const [followingNo, setFollowingNo] = React.useState(0);
     const [isFollower, setIsFollower] = React.useState(false);
+    const [errorMessage, setErrorMessage] = React.useState("");
 
-    function handleFollow() {
-        fetch('/follow', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json;charset=utf-8',
-                'X-CSRFToken': getCsrfToken(),
-            },
-            body: JSON.stringify({
-                followingUser: user,
-            }),
-            credentials: 'include',
-        })
-            .then(response => response.json())
-            .then(result => {
-                console.log(result.message || result.error);
 
-                fetch(`/get-profile-info/${user}`)
-                .then(response => response.json())
-                .then(info => {
-                    setFollowerNo(info.follower_no);
-                    setFollowingNo(info.following_no);
-                    setIsFollower(info.is_follower);
-                })
+    const fetchProfileInfo = async () => {
+        try {
+            const response = await fetch(`/get-profile-info/${user}`);
+            if (!response.ok) throw new Error("Failed to fetch profile information.");
+            const info = await response.json();
+
+            setFollowerNo(info.follower_no);
+            setFollowingNo(info.following_no);
+            setIsFollower(info.is_follower);
+        } catch(error) {
+            console.error("Error fetching profile info:", error.message);
+            setError("Failed to load profile information.");
+        }
+        
+    }
+    const postFollowInfo = async () => {
+        try {
+            const reponse = await fetch('/follow', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json;charset=utf-8',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: JSON.stringify({
+                    followingUser: user,
+                }),
+                credentials: 'include',
             })
 
-        setIsFollower(!isFollower);
+            if (!reponse.ok) throw new Error("Faild to fetch follow information!");
+
+            const result = await reponse.json();
+            
+            if (result.error) throw new Error(result.error);
+
+            console.log(result.message);
+
+            fetchProfileInfo();
+
+        } catch(error) {
+            setErrorMessage(error.message);
+        }
+    };
+
+    async function handleFollow() {
+        setErrorMessage("");
+        await postFollowInfo();
     }
 
     React.useEffect(()=> {
         if (!user) return;
 
-        fetch(`/get-profile-info/${user}`)
-            .then(response => response.json())
-            .then(info => {
-                setFollowerNo(info.follower_no);
-                setFollowingNo(info.following_no);
-                setIsFollower(info.is_follower);
-                // console.log("[Debug] isFollower: ", info.is_follower);
-            })
+        fetchProfileInfo();
     }, [user]);
 
     return (
@@ -401,6 +420,7 @@ function UserProfile({user}) {
             <div className="profile-info">
                 <h2>{user}</h2>
                 <p>{followerNo} follower | {followingNo} following</p>
+                {errorMessage && <p className="text-danger">{errorMessage}</p>}
                 {
                     states.loggedInUser !== user &&
                     <button 
