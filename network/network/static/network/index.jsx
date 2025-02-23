@@ -440,9 +440,11 @@ function Like({post}) {
     const [liked, setLiked] = React.useState(false);
     const [likes, setLikes] = React.useState(0);
     const [loading, setLoading] = React.useState(false);
+    const [errorMessage, setErrorMessage] = React.useState("");
 
 
     async function fetchLikes() {
+        setLoading(true);
         try {
             const response = await fetch(`/like/${post.id}`);
 
@@ -452,12 +454,16 @@ function Like({post}) {
 
             setLiked(data.liked);
             setLikes(data.likes);
+            setErrorMessage("");
         } catch (error) {
             console.error("Error fetching likes: ", error);
+            setErrorMessage("Unable to load like!");
+        } finally {
+            setLoading(false);
         }
     }
 
-    async function handleLike() {
+    async function toggleLike() {
         if (loading) return;
 
         setLoading(true);
@@ -480,6 +486,7 @@ function Like({post}) {
             await fetchLikes();
         } catch (error) {
             console.error("Error posting likes: ", error)
+            setErrorMessage("Failed to update like status!");
         } finally {
             setLoading(false);
         }
@@ -491,9 +498,10 @@ function Like({post}) {
 
     return (
         <div className='like'>
+            {errorMessage && <p className="text-danger">{errorMessage}</p>}
             <span 
                 className={`fa ${liked? "fa-heart" : "fa-heart-o"} ${loading ? "disabled" : ""}`}
-                onClick={handleLike}
+                onClick={toggleLike}
                 aria-hidden="true"
                 style={{cursor: loading ? "not-allowed" : "pointer"}}
                 >
