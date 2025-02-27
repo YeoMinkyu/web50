@@ -1,12 +1,14 @@
 import json
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 from .models import User, Post, Following, Likes
 
@@ -15,7 +17,6 @@ def index(request):
     return render(request, "network/index.html")
 
 
-@csrf_exempt
 @login_required(login_url="login")
 def edit_post(request, post_id):
     if request.method != "POST":
@@ -34,7 +35,6 @@ def edit_post(request, post_id):
     return JsonResponse({"message": "New post is edited successfully."}, status=201)
     
 
-@csrf_exempt
 @login_required(login_url="login")
 def follow(request):
     if request.method != "POST":
@@ -60,23 +60,46 @@ def follow(request):
         return JsonResponse({"messge": f"${logged_in_username} follows ${following_username}."})
 
 
-@csrf_exempt
 @login_required(login_url="login")
+@require_POST
 def generate_post(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST request required"}, status=400)
+    """
+    Handle POST requests to create a new Post instance tied to the authenticated user.
+    Returns JSON response with success message or error details.
+    """
+    try:
+        data = json.loads(request.body)
+
+        content = data.get("content", "").strip()
+
+        if not content:
+            return JsonResponse({"error": "Content is required."}, status=400)
+
+        # Use request.user directly(no need to fetch username and query again)
+        user = request.user
+
+        # Create and save the post using create() for efficiency
+        new_post = Post.objects.create(poster=user, contents=content)
+
+        return JsonResponse({"message": "New post created successfully.",
+                             "post": {
+                                 "id": new_post.id,
+                                 "content": new_post.contents,
+                                 "poster": user.username,
+                                 "create_at": new_post.created_at.isoformat()
+                             }
+                             }, status=201)
     
-    data = json.loads(request.body)
-
-    content = data.get("content", "")
-
-    username = request.user.get_username()
-    user = User.objects.get(username=username)
-
-    new_post = Post(poster=user, contents=content)
-    new_post.save()
-
-    return JsonResponse({"message": "New post created successfully."}, status=201)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+    except ObjectDoesNotExist:
+        return JsonResponse({"error": "User not found."}, status=404)
+    except KeyError:
+        # In case 'content' key is not in JSON
+        return JsonResponse({"error": "Missing content key."}, status=400)
+    except Exception as e:
+        # Catch any other exceptions which could be thrown by the database or Python runtime
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 def get_posts(request, which_posts="all", username="", page_number=1):
@@ -157,7 +180,6 @@ def get_username(request):
     return JsonResponse({'username': user_name}, status=200)
 
 
-@csrf_exempt
 @login_required(login_url="login")
 def like_post(request, post_id):
     user = request.user

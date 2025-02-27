@@ -515,15 +515,10 @@ function Like({post}) {
 }
 
 
-function loadPost() {
+// Ensure that the component only loads after the DOM is fully loaded
+window.onload = () => {
     const root = ReactDOM.createRoot(document.getElementById('app'));
     root.render(<SocialNetworkApp />);
-}
-
-
-// Ensure that the component only loads after the DOM is fully loaded
-window.onload = function() {
-    loadPost();
 };
 
 
