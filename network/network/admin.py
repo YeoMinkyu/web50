@@ -17,4 +17,4 @@ class Following(models.Model):
 '''
 admin.site.register(Post)
 admin.site.register(Likes)
-admin.site.register(Following)
+admin.site.register(Follow)

@@ -4,13 +4,14 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import Paginator
 from django.db import IntegrityError
+from django.db.models import QuerySet
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from .models import User, Post, Following, Likes
+from .models import User, Post, Follow, Likes
 
 
 def index(request):
@@ -42,22 +43,22 @@ def follow(request):
     
     data = json.loads(request.body)
 
-    following_username = data.get("followingUser", "")
-    # print(f"[Debug/views.py/follow] ${following_username}")
-    following_user = User.objects.get(username=following_username)
+    selected_username = data.get("selectedUser", "")
+    print(f"[Debug/views.py/follow] selectedUsername ${selected_username}")
+    selected_user = User.objects.get(username=selected_username)
 
     logged_in_username = request.user.get_username()
     logged_in_user = User.objects.get(username=logged_in_username)
 
-    is_following = Following.objects.filter(follower=logged_in_user, following_user=following_user).exists()
+    is_followed = Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).exists()
 
-    if is_following:
-        Following.objects.filter(follower=logged_in_user, following_user=following_user).delete()
-        return JsonResponse({"messge": f"${logged_in_username} unfollows ${following_username}."})
+    if is_followed:
+        Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).delete()
+        return JsonResponse({"messge": f"${logged_in_username} unfollows ${selected_username}."})
     else:
-        new_following = Following(follower=logged_in_user, following_user=following_user)
-        new_following.save()
-        return JsonResponse({"messge": f"${logged_in_username} follows ${following_username}."})
+        new_follow = Follow(follower=logged_in_user, followed_user=selected_user)
+        new_follow.save()
+        return JsonResponse({"messge": f"${logged_in_username} follows ${selected_username}."})
 
 
 @login_required(login_url="login")
@@ -103,28 +104,79 @@ def generate_post(request):
 
 
 def get_posts(request, which_posts="all", username="", page_number=1):
-    user = request.user
-    print("[Debug/views.py/get_posts] which_posts: ", which_posts)
-    print("[Debug/views.py/get_posts] Received page_number:", page_number)
-    print("[Debug/views.py/get_posts] Request path:", request.path)
+    """
+    Handle GET request to retrieve paginated posts based on type and user criteria
+    Args:
+        request: HTTP request object
+        which_post: Type of posts to fetch('all', 'following', 'profile')
+        username: Target username of profile posts(Optional)
+        page_number: Page number for pagination(default: 1) 
+    Returns:
+        JsonResponse with posts and pagination metadata or error message
+    """
+
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed. Use GET!"}, status=405)
+
+    try:
+        print("[Debug/views.py/get_posts] which_posts: ", which_posts)
+        print("[Debug/views.py/get_posts] Received page_number:", page_number)
+        print("[Debug/views.py/get_posts] Request path:", request.path)
+
+        page_number = max(int(page_number), 1)
+
+        posts = _get_filitered_posts(request.user, which_posts, username)
+
+        # print(f"[Debug/views.py/get_posts] posts: {posts}")
+
+        paginator = Paginator(posts, 10)
+        page_obj = paginator.get_page(page_number)
+        # print(f"[Debug/views.py/get_posts] page_obj: {page_obj}")
+        
+        response_data = {
+            "posts": [post.serialize() for post in page_obj],
+            "pagination": _build_pagination_metadata(page_obj),
+        }
+
+        # print(f"[Debug/views.py/get_posts] Total pages: {paginator.num_pages}")
+        # print(f"[Debug/views.py/get_posts] Posts in page {page_number}: {[post.serialize() for post in page_obj]}")
+        # print(f"[Debug/views.py/get_posts] response_data pagination: {response_data.get('pagination')}")
+
+        return JsonResponse(response_data, safe=False, status=200)
+    
+    except ValueError:
+        return JsonResponse({"error": "Invalid page number"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": f"An expected error occurred {str(e)}"}, status=500)
+    
+def _get_filitered_posts(user, which_posts:str, username:str) -> QuerySet | None:
+    # print(f"[Debug/views.py/get_posts] User: {user} Posts: {which_posts} Username: {username}")
 
     if which_posts == "all":
-        posts = Post.objects.all().order_by("-date_created").all()
-    elif which_posts == "following":    
-        following_users = [follow_connection.following_user.id for follow_connection in user.follower.all()]
-        # print("[Debug/views.py/get_posts] following_users: ", following_users)
+        # print(f"[Debug/views.py/get_posts] all Posts: {which_posts}")
+        return Post.objects.order_by("-date_created")
+    elif which_posts == "following":
+        # print(f"[Debug/views.py/get_posts] following Posts: {which_posts}")
+        # print(f"[Debug/views.py/get_posts] user.followers.all(): {user.followers.all()}")
+        # print(f"[Debug/views.py/get_posts] user.followed.all(): {user.followed.all()}")
+        # following_ids = [follow_connection.followed_user.id for follow_connection in user.followers.all()]
+        following_ids = user.followers.values_list("followed_user__id", flat=True)
+        # print("[Debug/views.py/get_posts] following_users: ", existing_following_ids)
+        # print("[Debug/views.py/get_posts] following_users: ", following_ids)
         
-        posts = Post.objects.filter(poster__in=following_users).order_by("-date_created")
+        return Post.objects.filter(poster__id__in=following_ids).order_by("-date_created")
         # print("[Debug/views.py/get_posts] Filtered posts count:", posts.count())
 
     elif which_posts == "profile" and username:
-        posts = Post.objects.filter(poster__username=username).order_by("-date_created")
-    else:
-        return JsonResponse({"error": "Invalid Request!"}, status=400)
+        # print(f"[Debug/views.py/get_posts] profile Posts: {which_posts}")
+        return Post.objects.filter(poster__username=username).order_by("-date_created")
+    
+    return None
 
-    paginator = Paginator(posts, 10)
-    page_obj = paginator.get_page(page_number)
-    # print(f"[Debug/views.py/get_posts] page_obj: {page_obj}")
+def _build_pagination_metadata(page_obj) -> dict:
+    """
+    Build pagination metadata from a Paginator page object.
+    """
 
     pagination_metadata = {
                 "has_previous": page_obj.has_previous(),
@@ -135,16 +187,7 @@ def get_posts(request, which_posts="all", username="", page_number=1):
                 "next_page_number": page_obj.next_page_number() if page_obj.has_next() else None,
                 }
     
-    response_data = {
-        "posts": [post.serialize() for post in page_obj],
-        "pagination": pagination_metadata,
-    }
-
-    # print(f"[Debug/views.py/get_posts] Total pages: {paginator.num_pages}")
-    # print(f"[Debug/views.py/get_posts] Posts in page {page_number}: {[post.serialize() for post in page_obj]}")
-    # print(f"[Debug/views.py/get_posts] response_data pagination: {response_data.get('pagination')}")
-
-    return JsonResponse(response_data, safe=False)
+    return pagination_metadata 
     
 
 def get_profile_info(request, username):
@@ -156,16 +199,16 @@ def get_profile_info(request, username):
         except User.DoesNotExist:
             return JsonResponse({"error": "User not found!"}, status=404)
         else:
-            follower_no = profile_user.following.count()
-            following_no = profile_user.follower.count()
-            is_follower = Following.objects.filter(follower=user, following_user=profile_user).exists()
+            follower_no = profile_user.followed.count()
+            followed_no = profile_user.followers.count()
+            is_follower = Follow.objects.filter(follower=user, followed_user=profile_user).exists()
 
             # print(f"[Debug/views.py/get_profile_info] is_follower: {is_follower}")
 
-            # print(f"[Debug] follower: {follower_no} / following: {following_no}")
+            print(f"[Debug] follower: {follower_no} / followed: {followed_no}")
 
             return JsonResponse({"follower_no": follower_no,
-                                "following_no": following_no,
+                                "following_no": followed_no,
                                 "is_follower": is_follower,
                                 }, status=200)
 
@@ -268,4 +311,3 @@ def register(request):
         return HttpResponseRedirect(reverse("index"))
     else:
         return render(request, "network/register.html")
-    

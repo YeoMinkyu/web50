@@ -16,7 +16,7 @@ function SocialNetworkApp() {
     const [states, dispatch] = React.useReducer(statesReducer, initialStates);
 
     const handlePageChange = async (pageNumber, view = states.currentView) => {
-        // console.log(`[Debug] handlePageChange called for view: ${view}, pageNumber: ${pageNumber}`);
+        console.log(`[Debug] handlePageChange called for view: ${view}, pageNumber: ${pageNumber}`);
         let url = view === "profile"
             ? `/get-posts/${view}/${states.selectedUser}/${pageNumber}`
             : `/get-posts/${view}/${pageNumber}`;
@@ -126,7 +126,7 @@ function Pagination({onPageChange}) {
     // console.log("[Debug] pageNumbers: ", pageNumbers);
     // console.log("[Debug] currentView: ", currentView);
 
-    const handlePageNave = (e, pageNumber) => {
+    const handlePageNav = (e, pageNumber) => {
         e.preventDefault();
         onPageChange(pageNumber, states.currentView);
     }
@@ -139,7 +139,7 @@ function Pagination({onPageChange}) {
                 <li className={`page-item ${!states.paginationInfo.hasPrevious && "disabled"}`}>
                 <a  className="page-link"
                     href='#'
-                    onClick={(e) => {handlePageNave(e, states.paginationInfo.previousPageNumber)}}
+                    onClick={(e) => {handlePageNav(e, states.paginationInfo.previousPageNumber)}}
                     tabIndex={states.paginationInfo.hasPrevious ? "0" : "-1"}
                     aria-disabled={!states.paginationInfo.hasPrevious}>
                         Previous
@@ -150,7 +150,7 @@ function Pagination({onPageChange}) {
                         <li key={number} className={`page-item ${states.paginationInfo.pageNumber === number && "active"}`}>
                             <a  className="page-link"
                                 href='#'
-                                onClick={(e) => {handlePageNave(e, number)}}>
+                                onClick={(e) => {handlePageNav(e, number)}}>
                                 {number}
                                 {states.paginationInfo.pageNumber === number && <span className="sr-only">(current)</span>}
                             </a>
@@ -160,7 +160,7 @@ function Pagination({onPageChange}) {
                 <li className={`page-item ${!states.paginationInfo.hasNext && "disabled"}`}>
                 <a  className="page-link"
                     href='#'
-                    onClick={(e) => {handlePageNave(e, states.paginationInfo.nextPageNumber)}}
+                    onClick={(e) => {handlePageNav(e, states.paginationInfo.nextPageNumber)}}
                     tabIndex={states.paginationInfo.hasNext ? "0" : "-1"}
                     aria-disabled={!states.paginationInfo.hasNext}>
                     Next
@@ -359,6 +359,7 @@ function UserProfile({user}) {
     const [isFollower, setIsFollower] = React.useState(false);
     const [errorMessage, setErrorMessage] = React.useState("");
 
+     console.log("[Debug] User Profile selected user: ", user);
 
     const fetchProfileInfo = async () => {
         try {
@@ -384,7 +385,7 @@ function UserProfile({user}) {
                     'X-CSRFToken': getCsrfToken(),
                 },
                 body: JSON.stringify({
-                    followingUser: user,
+                    selectedUser: user,
                 }),
                 credentials: 'include',
             })
