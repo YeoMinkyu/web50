@@ -9,7 +9,7 @@ from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET, require_http_methods
 
 from .models import User, Post, Follow, Likes
 
@@ -19,47 +19,80 @@ def index(request):
 
 
 @login_required(login_url="login")
-def edit_post(request, post_id):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST request required"}, status=400)
+@require_POST
+def edit_post(request, post_id:int) -> JsonResponse:
+    """
+    Handle POST request to edit an existing post's content.
+    Args:
+        request: HTTP request object.
+        post_id: ID of the post to edit.
+    Returns:
+        JsonResponse with success message or errors details.
+    """
+    try:
+        data = json.loads(request.body)
+        content = data["content"].strip()
+
+        if not content:
+            return JsonResponse({"error": "Content cannot be empty!"}, status=400)
+
+        edit_post = Post.objects.get(id=post_id)
+        if request.user != edit_post.poster:
+            return JsonResponse({"error": "You can only edit your own posts!"}, status=403)
+
+        edit_post.contents = content
+        edit_post.save(update_fields=["contents"])
+
+        return JsonResponse({"message": "New post is edited successfully."}, status=201)
     
-    data = json.loads(request.body)
-    content = data.get("content", "")
+    except KeyError:
+        return JsonResponse({"error": "Missing content key."}, status=400)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid Json."}, status=400)
+    except Post.DoesNotExist:
+        return JsonResponse({"error": "Post does not exist."}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": f"Unexpected error occurred {str(e)}"}, status=500)
 
-    edit_post = Post.objects.get(id=post_id)
-    edit_post.contents = content
-    edit_post.save()
 
-    # print(f"[Debug/views.py/edit_post] edit_post: {edit_post}")
-    # print(f"[Debug/views.py/edit_post] date: {edit_post.date_created}")
-
-    return JsonResponse({"message": "New post is edited successfully."}, status=201)
-    
-
+@require_POST
 @login_required(login_url="login")
-def follow(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST request required"}, status=400)
+def follow(request) -> JsonResponse:
+    """
+    Handle POST request to toggle follow/unfollow relationships between users.
+    Returns:
+        JsonResponse with success message or error details.
+    """
     
-    data = json.loads(request.body)
+    try:
+        data = json.loads(request.body)
 
-    selected_username = data.get("selectedUser", "")
-    print(f"[Debug/views.py/follow] selectedUsername ${selected_username}")
-    selected_user = User.objects.get(username=selected_username)
+        selected_username = data["selectedUser"].strip()
 
-    logged_in_username = request.user.get_username()
-    logged_in_user = User.objects.get(username=logged_in_username)
+        logged_in_user = request.user
 
-    is_followed = Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).exists()
+        selected_user = User.objects.get(username=selected_username)
 
-    if is_followed:
-        Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).delete()
-        return JsonResponse({"messge": f"${logged_in_username} unfollows ${selected_username}."})
-    else:
-        new_follow = Follow(follower=logged_in_user, followed_user=selected_user)
-        new_follow.save()
-        return JsonResponse({"messge": f"${logged_in_username} follows ${selected_username}."})
+        follow_exists = Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).exists()
 
+        if follow_exists:
+            Follow.objects.filter(follower=logged_in_user, followed_user=selected_user).delete()
+            message = f"{logged_in_user.username} unfollows {selected_username}"
+        else:
+            Follow.objects.create(follower=logged_in_user, followed_user=selected_user)
+            message = f"{logged_in_user.username} follows {selected_username}"
+        
+        return JsonResponse({"message": message}, status=200)
+    
+    except KeyError:
+        return JsonResponse({"error": "Missing selectedUser key."}, status=400)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+    except ObjectDoesNotExist:
+        return JsonResponse({"error": "Target user does not exsist."}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": f"Unexpected error occurred {str(e)}."}, status=500)
+    
 
 @login_required(login_url="login")
 @require_POST
@@ -103,6 +136,7 @@ def generate_post(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+@require_GET
 def get_posts(request, which_posts="all", username="", page_number=1):
     """
     Handle GET request to retrieve paginated posts based on type and user criteria
@@ -114,9 +148,6 @@ def get_posts(request, which_posts="all", username="", page_number=1):
     Returns:
         JsonResponse with posts and pagination metadata or error message
     """
-
-    if request.method != "GET":
-        return JsonResponse({"error": "Method not allowed. Use GET!"}, status=405)
 
     try:
         print("[Debug/views.py/get_posts] which_posts: ", which_posts)
@@ -148,7 +179,8 @@ def get_posts(request, which_posts="all", username="", page_number=1):
         return JsonResponse({"error": "Invalid page number"}, status=400)
     except Exception as e:
         return JsonResponse({"error": f"An expected error occurred {str(e)}"}, status=500)
-    
+
+
 def _get_filitered_posts(user, which_posts:str, username:str) -> QuerySet | None:
     # print(f"[Debug/views.py/get_posts] User: {user} Posts: {which_posts} Username: {username}")
 
@@ -173,6 +205,7 @@ def _get_filitered_posts(user, which_posts:str, username:str) -> QuerySet | None
     
     return None
 
+
 def _build_pagination_metadata(page_obj) -> dict:
     """
     Build pagination metadata from a Paginator page object.
@@ -188,32 +221,43 @@ def _build_pagination_metadata(page_obj) -> dict:
                 }
     
     return pagination_metadata 
-    
-
-def get_profile_info(request, username):
-    if request.method == "GET":
-        user = request.user
-
-        try:
-            profile_user = User.objects.get(username=username)
-        except User.DoesNotExist:
-            return JsonResponse({"error": "User not found!"}, status=404)
-        else:
-            follower_no = profile_user.followed.count()
-            followed_no = profile_user.followers.count()
-            is_follower = Follow.objects.filter(follower=user, followed_user=profile_user).exists()
-
-            # print(f"[Debug/views.py/get_profile_info] is_follower: {is_follower}")
-
-            print(f"[Debug] follower: {follower_no} / followed: {followed_no}")
-
-            return JsonResponse({"follower_no": follower_no,
-                                "following_no": followed_no,
-                                "is_follower": is_follower,
-                                }, status=200)
 
 
-    return JsonResponse({"error": "Invalid Request!"}, status=400)
+@login_required(login_url="login")
+@require_GET
+def get_profile_info(request, username: str) -> JsonResponse:
+    """
+    Handle Get get request to retrieve profile info of a target user.
+    Args:
+        request: HTTP request object
+        username : a target username to get information
+    Returns:
+        JsonResponse with follower/following counts and follow status, or error message
+    """
+
+    try:
+        profile_user = User.objects.get(username=username)
+
+        follower_no = profile_user.followed.count()
+        following_no = profile_user.followers.count()
+        is_follower = Follow.objects.filter(follower=request.user, followed_user=profile_user).exists()
+
+        # print(f"[Debug/views.py/get_profile_info] is_follower: {is_follower}")
+
+        # print(f"[Debug] follower: {follower_no} / followed: {followed_no}")
+
+        response_data = {
+            "follower_no": follower_no,
+            "following_no": following_no,
+            "is_follower": is_follower,
+        }
+
+        return JsonResponse(response_data, status=200)
+
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found!"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": f"Unexpected error occured: {str(e)}"}, status=500)
 
 
 # @login_required(login_url="login")
@@ -223,12 +267,25 @@ def get_username(request):
     return JsonResponse({'username': user_name}, status=200)
 
 
+@require_http_methods(['GET', 'POST'])
 @login_required(login_url="login")
-def like_post(request, post_id):
+def like_post(request, post_id: int) -> JsonResponse:
+    """
+    Handle HTTP request for post likes.
+    - GET: Retrieve like status and count for the post.
+    - POST: Toggle like/unlike status for the post by the current user.
+    Args:
+        request: HTTP request object
+        post_id: ID of the post to interact with
+    Returns:
+        JsonResponse with like data or error details.
+    """
+
     user = request.user
+    post = get_object_or_404(Post, id=post_id)
+
 
     if request.method == "GET":
-        post = get_object_or_404(Post, id=post_id)
 
         liked = Likes.objects.filter(post=post, user=user).exists()
         likes_count = post.like.count()
@@ -237,29 +294,31 @@ def like_post(request, post_id):
                             'likes': likes_count,
                             }, status=200)
     
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            liked = data.get("liked", None)
+    try:
+        data = json.loads(request.body)
+        liked = data.get("liked")
 
-            if liked is None:
-                return JsonResponse({"error": "Missing 'liked' filed"}, status=400)
-            
-            post = get_object_or_404(Post, id=post_id)
-
-            if liked:
-                Likes.objects.get_or_create(user=user, post=post)
-                message = "Like added successfully."
-            else:
-                Likes.objects.filter(user=user, post=post).delete()
-                message = "Like removed successfully."
-            
-            return JsonResponse({"message": message}, status=201)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON data!"}, status=400)
+        if liked is None:
+            return JsonResponse({"error": "Missing 'liked' field in request body."}, status=400)
         
-    return JsonResponse({"error":"Invalid reqeust method!"}, status=405)
+        if liked:
+            Likes.objects.get_or_create(user=user, post=post)
+            message = "Like added successfully."
+        else:
+            Likes.objects.filter(user=user, post=post).delete()
+            message = "Like removed successfully."
+        
+        likes_count = post.like.count()
 
+        return JsonResponse({"message": message,
+                             "likes": likes_count},
+                             status=200)
+    
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data!"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": "Unexpected error occurred!"}, status=500)
+        
 
 def login_view(request):
     if request.method == "POST":
