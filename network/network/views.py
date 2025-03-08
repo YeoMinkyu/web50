@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST, require_GET, require_http
 from .models import User, Post, Follow, Likes
 
 
-def index(request):
+def index(request, username=None):
     return render(request, "network/index.html")
 
 
@@ -156,7 +156,7 @@ def get_posts(request, which_posts="all", username="", page_number=1):
 
         page_number = max(int(page_number), 1)
 
-        posts = _get_filitered_posts(request.user, which_posts, username)
+        posts = _get_filtered_posts(request.user, which_posts, username)
 
         # print(f"[Debug/views.py/get_posts] posts: {posts}")
 
@@ -181,7 +181,7 @@ def get_posts(request, which_posts="all", username="", page_number=1):
         return JsonResponse({"error": f"An expected error occurred {str(e)}"}, status=500)
 
 
-def _get_filitered_posts(user, which_posts:str, username:str) -> QuerySet | None:
+def _get_filtered_posts(user, which_posts:str, username:str) -> QuerySet | None:
     # print(f"[Debug/views.py/get_posts] User: {user} Posts: {which_posts} Username: {username}")
 
     if which_posts == "all":
